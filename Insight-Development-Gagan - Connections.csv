@@ -1,0 +1,5 @@
+application,id,name,description,authorized_at,authorization_status,authorization_error,created_at,updated_at,external_id,folder_id,connection_lost_at,connection_lost_reason,parent_id
+teams_bot,18922927,iSteer Bot - General Connection,,null,success,,2026-02-04T12:53:36.117+05:30,2026-02-04T13:00:52.145+05:30,,29570622,,,null
+teams_bot,18703973,Test Isteer PDG finance connect,,null,,,2025-12-25T21:23:14.082+05:30,2026-02-04T12:59:19.320+05:30,,28756749,2026-02-04T12:44:48.189+05:30,401 Unauthorized,null
+teams_bot,15807285,Malaysia,,2024-10-22T19:54:27.064+05:30,success,,2024-10-22T19:54:13.741+05:30,2024-10-22T19:56:50.203+05:30,,256297,2024-12-16T15:08:31.002+05:30,unexpected error during refresh,null
+google_sheets,18103731,Mohamed Fahadh's Google Sheet connection,,2025-12-09T12:50:18.761+05:30,success,,2025-09-22T22:47:44.502+05:30,2025-12-09T12:50:18.763+05:30,,26752341,,,null
