@@ -1,5 +1,4 @@
 import { useState, useEffect } from 'react'
-import Papa from 'papaparse'
 import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 import './App.css'
 const API = import.meta.env.VITE_API_URL;
@@ -46,38 +45,16 @@ function App() {
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
 
-  useEffect(() => {
-  const fetchData = async () => {
-    try {
-      const response = await fetch(
-        "https://dashboard-api-971e.onrender.com/api/projects"
-      )
-
-      const data = await response.json()
-
-      setProjects(data)
-      setLoading(false)
-    } catch (error) {
-      console.error("Failed to fetch projects:", error)
-      setLoading(false)
-    }
-  }
-
-  fetchData()
-
-  // Auto refresh every 15 sec
-  const interval = setInterval(fetchData, 15000)
-  return () => clearInterval(interval)
-}, [])
-
+ 
 useEffect(() => {
   const fetchData = async () => {
-    const [connectionsRes, jobsRes, recipesRes] = await Promise.all([
+    const [projectsRes, connectionsRes, jobsRes, recipesRes] = await Promise.all([
+      fetch(`${API}/api/projects`),
       fetch(`${API}/api/connections`),
       fetch(`${API}/api/jobs`),
       fetch(`${API}/api/recipes`)
     ]);
-
+    setProjects(await projectsRes.json());
     setConnections(await connectionsRes.json());
     setJobs(await jobsRes.json());
     setRecipes(await recipesRes.json());
