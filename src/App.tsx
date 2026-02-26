@@ -45,31 +45,35 @@ function App() {
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
 
- 
-useEffect(() => {
-  const fetchData = async () => {
-    try {
-      setLoading(true);
+const [lastSynced, setLastSynced] = useState<string | null>(null);
 
-      const [projectsRes, connectionsRes, jobsRes, recipesRes] = await Promise.all([
+const fetchData = async () => {
+  try {
+    setLoading(true);
+
+    const [projectsRes, connectionsRes, jobsRes, recipesRes] =
+      await Promise.all([
         fetch(`${API}/api/projects`),
         fetch(`${API}/api/connections`),
         fetch(`${API}/api/jobs`),
         fetch(`${API}/api/recipes`)
       ]);
 
-      setProjects(await projectsRes.json());
-      setConnections(await connectionsRes.json());
-      setJobs(await jobsRes.json());
-      setRecipes(await recipesRes.json());
-    } catch (error) {
-      console.error("Error fetching data:", error);
-    } finally {
-      setLoading(false);   // ✅ runs AFTER fetch completes
-    }
-  };
+    setProjects(await projectsRes.json());
+    setConnections(await connectionsRes.json());
+    setJobs(await jobsRes.json());
+    setRecipes(await recipesRes.json());
 
-
+    setLastSynced(new Date().toLocaleString()); // 👈 update time
+  } catch (error) {
+    console.error("Error fetching data:", error);
+  } finally {
+    setLoading(false);
+  }
+};
+  
+useEffect(() => {
+  fetchData();
 }, []);
 
   const connectionStats = {
@@ -132,7 +136,24 @@ useEffect(() => {
   }
 
   return (
+    
     <div className="dashboard">
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
+  <button onClick={fetchData} style={{
+    padding: "8px 16px",
+    cursor: "pointer",
+    backgroundColor: "#1976d2",
+    color: "white",
+    border: "none",
+    borderRadius: "4px"
+  }}>
+    🔄 Refresh
+  </button>
+
+  <div style={{ fontSize: "14px", color: "gray" }}>
+    {lastSynced ? `Last synced: ${lastSynced}` : "Not synced yet"}
+  </div>
+</div>
       <header className="header">
         <h1>Insight Development Dashboard</h1>
         <p>Real-time Analytics & Monitoring</p>
