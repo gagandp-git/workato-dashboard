@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 import './App.css'
-const API = import.meta.env.VITE_API_URL;
+const API = import.meta.env.VITE_API_URL as string;
 
 interface Connection {
   application: string
@@ -48,21 +48,31 @@ function App() {
  
 useEffect(() => {
   const fetchData = async () => {
-    const [projectsRes, connectionsRes, jobsRes, recipesRes] = await Promise.all([
-      fetch(`${API}/api/projects`),
-      fetch(`${API}/api/connections`),
-      fetch(`${API}/api/jobs`),
-      fetch(`${API}/api/recipes`)
-    ]);
-    setProjects(await projectsRes.json());
-    setConnections(await connectionsRes.json());
-    setJobs(await jobsRes.json());
-    setRecipes(await recipesRes.json());
+    try {
+      setLoading(true);
+
+      const [projectsRes, connectionsRes, jobsRes, recipesRes] = await Promise.all([
+        fetch(`${API}/api/projects`),
+        fetch(`${API}/api/connections`),
+        fetch(`${API}/api/jobs`),
+        fetch(`${API}/api/recipes`)
+      ]);
+
+      setProjects(await projectsRes.json());
+      setConnections(await connectionsRes.json());
+      setJobs(await jobsRes.json());
+      setRecipes(await recipesRes.json());
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);   // ✅ runs AFTER fetch completes
+    }
   };
 
-  fetchData()
-  const interval = setInterval(fetchData, 15000)
-  return () => clearInterval(interval)
+  fetchData();
+  const interval = setInterval(fetchData, 15000);
+
+  return () => clearInterval(interval);
 }, []);
 
   const connectionStats = {
