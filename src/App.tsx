@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
 import './App.css'
-const API = import.meta.env.VITE_API_URL as string;
+const BASE_URL = import.meta.env.VITE_API_URL as string;
 
 interface Connection {
   application: string
@@ -24,12 +24,12 @@ interface Project {
 }
 
 interface Recipe {
-  id: string
+  id: number
   name: string
-  running: string
-  job_succeeded_count: string
-  job_failed_count: string
-  project_id: string
+  running: boolean
+  job_succeeded_count: number
+  job_failed_count: number
+  project_id: number
 }
 
 const COLORS = ['#11998e', '#38ef7d', '#06d6a0', '#1dd1a1', '#10ac84', '#05c46b']
@@ -52,12 +52,12 @@ const fetchData = async () => {
     setLoading(true);
 
     const [projectsRes, connectionsRes, jobsRes, recipesRes] =
-      await Promise.all([
-        fetch(`${API}/api/projects`),
-        fetch(`${API}/api/connections`),
-        fetch(`${API}/api/jobs`),
-        fetch(`${API}/api/recipes`)
-      ]);
+  await Promise.all([
+    fetch(`${BASE_URL}/api/projects`),
+    fetch(`${BASE_URL}/api/connections`),
+    fetch(`${BASE_URL}/api/jobs`),
+    fetch(`${BASE_URL}/api/recipes`)
+  ]);
 
     setProjects(await projectsRes.json());
     setConnections(await connectionsRes.json());
@@ -91,9 +91,10 @@ useEffect(() => {
   })
 
   const filteredRecipes = recipes.filter(recipe => {
-    if (selectedProject !== 'all' && recipe.project_id !== selectedProject) return false
-    return true
-  })
+  if (selectedProject !== 'all' && recipe.project_id !== Number(selectedProject)) 
+    return false
+  return true
+})
 
   const jobStats = {
     total: filteredJobs.length,
@@ -109,10 +110,10 @@ useEffect(() => {
   const appData = Object.entries(connectionByApp).map(([name, value]) => ({ name, value }))
 
   const recipeStats = filteredRecipes.map(r => ({
-    name: r.name.substring(0, 20) + '...',
-    succeeded: parseInt(r.job_succeeded_count) || 0,
-    failed: parseInt(r.job_failed_count) || 0
-  })).slice(0, 5)
+  name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
+  succeeded: r.job_succeeded_count || 0,
+  failed: r.job_failed_count || 0
+})).slice(0, 5)
 
   const jobsByDate = filteredJobs.reduce((acc, job) => {
     if (job.completed_at) {
@@ -174,7 +175,10 @@ useEffect(() => {
           <label>Recipe:</label>
           <select value={selectedRecipe} onChange={(e) => setSelectedRecipe(e.target.value)}>
             <option value="all">All Recipes</option>
-            {recipes.filter(r => selectedProject === 'all' || r.project_id === selectedProject).map((r: any) => (
+            {recipes.filter(r => 
+  selectedProject === 'all' || 
+  r.project_id === Number(selectedProject)
+).map((r: any) => (
               <option key={r.id} value={r.id}>{r.name}</option>
             ))}
           </select>
@@ -234,7 +238,7 @@ useEffect(() => {
             <h3>Recipes</h3>
             <div className="stat-number">{recipes.length}</div>
             <div className="stat-detail">
-              <span className="success">{recipes.filter(r => r.running === 'TRUE').length} Running</span>
+              <span className="success">{recipes.filter(r => r.running === true).length} Running</span>
             </div>
           </div>
         </div>
