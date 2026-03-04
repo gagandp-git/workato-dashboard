@@ -156,8 +156,8 @@ useEffect(() => {
   </div>
 </div>
       <header className="header">
-        <h1>Insight Development Dashboard</h1>
-        <p>Real-time Analytics & Monitoring</p>
+        <h1>Workato Observability & Performance Analytics</h1>
+        <p>Track automation performance</p>
       </header>
 
       <div className="filters">
