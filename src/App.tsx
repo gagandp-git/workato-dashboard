@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { BarChart, Bar, PieChart, Pie, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import './App.css'
 const BASE_URL = import.meta.env.VITE_API_URL as string;
 
@@ -32,7 +32,6 @@ interface Recipe {
   project_id: number
 }
 
-const COLORS = ['#11998e', '#38ef7d', '#06d6a0', '#1dd1a1', '#10ac84', '#05c46b']
 
 function App() {
   const [connections, setConnections] = useState<Connection[]>([])
