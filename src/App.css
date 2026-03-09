@@ -162,6 +162,82 @@
   font-size: 1.2rem;
 }
 
+.connections-menu {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.app-group {
+  border-bottom: 1px solid #eee;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  padding: 0.75rem;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.app-header:hover {
+  background: #f8f9ff;
+}
+
+.app-toggle {
+  width: 20px;
+  color: #666;
+  font-size: 0.8rem;
+}
+
+.app-name {
+  flex: 1;
+  font-weight: 600;
+  color: #333;
+}
+
+.app-count {
+  background: #11998e;
+  color: white;
+  padding: 0.25rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
+.connections-list {
+  background: #f8f9ff;
+  padding: 0.5rem 0;
+}
+
+.connection-item {
+  display: flex;
+  align-items: center;
+  padding: 0.5rem 1rem 0.5rem 2.5rem;
+  transition: background 0.2s ease;
+}
+
+.connection-item:hover {
+  background: #eef0ff;
+}
+
+.connection-name {
+  flex: 1;
+  color: #555;
+}
+
+.connection-status {
+  font-weight: bold;
+  font-size: 1rem;
+}
+
+.status-success {
+  color: #43e97b;
+}
+
+.status-failed {
+  color: #fa709a;
+}
+
 .table-section {
   background: white;
   border-radius: 16px;

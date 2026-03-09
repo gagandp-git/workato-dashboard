@@ -46,6 +46,7 @@ function App() {
   const [endDate, setEndDate] = useState<string>('')
 
 const [lastSynced, setLastSynced] = useState<string | null>(null);
+const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
 
 const fetchData = async () => {
   try {
@@ -103,11 +104,19 @@ useEffect(() => {
   }
 
   const connectionByApp = connections.reduce((acc, conn) => {
-    acc[conn.application] = (acc[conn.application] || 0) + 1
+    if (!acc[conn.application]) acc[conn.application] = []
+    acc[conn.application].push(conn)
     return acc
-  }, {} as Record<string, number>)
+  }, {} as Record<string, Connection[]>)
 
-  const appData = Object.entries(connectionByApp).map(([name, value]) => ({ name, value }))
+  const toggleApp = (app: string) => {
+    setExpandedApps(prev => {
+      const next = new Set(prev)
+      if (next.has(app)) next.delete(app)
+      else next.add(app)
+      return next
+    })
+  }
 
   const recipeStats = filteredRecipes.map(r => ({
   name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
@@ -247,17 +256,29 @@ useEffect(() => {
       <div className="charts-grid">
         <div className="chart-card">
           <h3>Connections by Application</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
-              <Pie data={appData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={100} label>
-                {appData.map((_, index) => (
-                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                ))}
-              </Pie>
-              <Tooltip />
-              <Legend />
-            </PieChart>
-          </ResponsiveContainer>
+          <div className="connections-menu">
+            {Object.entries(connectionByApp).map(([app, conns]) => (
+              <div key={app} className="app-group">
+                <div className="app-header" onClick={() => toggleApp(app)}>
+                  <span className="app-toggle">{expandedApps.has(app) ? '▼' : '▶'}</span>
+                  <span className="app-name">{app}</span>
+                  <span className="app-count">{conns.length}</span>
+                </div>
+                {expandedApps.has(app) && (
+                  <div className="connections-list">
+                    {conns.map((conn, idx) => (
+                      <div key={idx} className="connection-item">
+                        <span className="connection-name">{conn.name}</span>
+                        <span className={`connection-status ${conn.authorization_status === 'success' ? 'status-success' : 'status-failed'}`}>
+                          {conn.authorization_status === 'success' ? '✓' : '✗'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
 
         <div className="chart-card">
