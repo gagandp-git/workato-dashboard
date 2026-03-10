@@ -163,6 +163,22 @@ useEffect(() => {
 
   const dailyJobData = Object.values(jobsByDate).slice(-7)
 
+  const renderFolders = (parentId: number, level = 0): JSX.Element[] => {
+  const children = folders.filter(f => f.parent_id === parentId)
+
+  return children.map(folder => (
+    <div key={folder.id}>
+      <div
+        className="connection-item"
+        style={{ paddingLeft: `${level * 20}px` }}
+      >
+        📂 {folder.name}
+      </div>
+
+      {renderFolders(folder.id, level + 1)}
+    </div>
+  ))
+}
   if (loading) {
     return (
       <div className="loading">
@@ -340,28 +356,22 @@ useEffect(() => {
       </div>
 
       <div className="table-section">
-        <h3>Projects & Folders</h3>
-        <div className="connections-menu">
-          {projectFolders.map((project) => (
-            <div key={project.id} className="app-group">
-              <div className="app-header" onClick={() => toggleProject(project.id)}>
-                <span className="app-toggle">{expandedProjects.has(project.id) ? '▼' : '▶'}</span>
-                <span className="app-name">{project.name}</span>
-                <span className="app-count">{getFoldersByProject(project.project_id).length}</span>
-              </div>
-              {expandedProjects.has(project.id) && (
-                <div className="connections-list">
-                  {getFoldersByProject(project.project_id).map((folder) => (
-                    <div key={folder.id} className="connection-item">
-                      <span className="connection-name">{folder.name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
+  <h3>Projects & Folders</h3>
+
+  <div className="connections-menu">
+    {projectFolders.map((project) => (
+      <div key={project.id} className="app-group">
+        <div className="app-header">
+          <span className="app-name">📁 {project.name}</span>
+        </div>
+
+        <div className="connections-list">
+          {renderFolders(project.id)}
         </div>
       </div>
+    ))}
+  </div>
+</div>
     </div>
   )
 }
