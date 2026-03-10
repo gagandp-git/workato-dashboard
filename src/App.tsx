@@ -40,6 +40,7 @@ interface Recipe {
   job_succeeded_count: number
   job_failed_count: number
   project_id: number
+  folder_id: number
 }
 
 
@@ -54,7 +55,10 @@ function App() {
   const [selectedProject, setSelectedProject] = useState<string>('all')
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
-
+const [selectedNode, setSelectedNode] = useState<{
+  type: "project" | "folder"
+  id: number
+} | null>(null)
 const [lastSynced, setLastSynced] = useState<string | null>(null);
 const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
 
@@ -115,6 +119,20 @@ useEffect(() => {
     failed: filteredJobs.filter(j => j.status === 'failed').length
   }
 
+  const filteredRecipesByNode = recipes.filter(r => {
+  if (!selectedNode) return false
+
+  if (selectedNode.type === "project") {
+    return r.project_id === selectedNode.id
+  }
+
+  if (selectedNode.type === "folder") {
+    return r.folder_id === selectedNode.id
+  }
+
+  return false
+})
+  
   const connectionByApp = connections.reduce((acc, conn) => {
     if (!acc[conn.application]) acc[conn.application] = []
     acc[conn.application].push(conn)
@@ -133,7 +151,9 @@ useEffect(() => {
   
 
   const projectFolders = folders.filter(f => f.is_project)
- 
+ const getFolders = (parentId: number) => {
+  return folders.filter(f => f.parent_id === parentId)
+}
 
   const recipeStats = filteredRecipes.map(r => ({
   name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
@@ -153,19 +173,31 @@ useEffect(() => {
 
   const dailyJobData = Object.values(jobsByDate).slice(-7)
 
-  const renderFolders = (parentId: number, level = 0): JSX.Element[] => {
+  const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
+
   const children = folders.filter(f => f.parent_id === parentId)
 
   return children.map(folder => (
     <div key={folder.id}>
+
       <div
         className="connection-item"
-        style={{ paddingLeft: `${level * 20}px` }}
+        style={{
+          paddingLeft: `${level * 18}px`,
+          cursor: "pointer"
+        }}
+        onClick={() =>
+          setSelectedNode({
+            type: "folder",
+            id: folder.id
+          })
+        }
       >
         📂 {folder.name}
       </div>
 
       {renderFolders(folder.id, level + 1)}
+
     </div>
   ))
 }
@@ -350,16 +382,46 @@ useEffect(() => {
 
   <div className="connections-menu">
     {projectFolders.map((project) => (
-      <div key={project.id} className="app-group">
-        <div className="app-header">
-          <span className="app-name">📁 {project.name}</span>
-        </div>
 
-        <div className="connections-list">
-          {renderFolders(project.id)}
-        </div>
+  <div key={project.id} className="app-group">
+
+    <div
+      className="app-header"
+      style={{ cursor: "pointer" }}
+      onClick={() =>
+        setSelectedNode({
+          type: "project",
+          id: project.id
+        })
+      }
+    >
+      <span className="app-name">📁 {project.name}</span>
+    </div>
+
+    {renderFolders(project.id)}
+
+  </div>
+
+))}
+  </div>
+</div>
+<div className="table-section">
+  <h3>Recipes</h3>
+
+  <div className="connections-menu">
+
+    {!selectedNode && (
+  <div className="connection-item">
+    Select project or folder
+  </div>
+)}
+
+    {filteredRecipesByNode.map(recipe => (
+      <div key={recipe.id} className="connection-item">
+        📄 {recipe.name}
       </div>
     ))}
+
   </div>
 </div>
     </div>
