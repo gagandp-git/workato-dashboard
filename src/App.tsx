@@ -23,6 +23,16 @@ interface Project {
   folder_id: string
 }
 
+interface Folder {
+  id: number
+  name: string
+  parent_id: number | null
+  project_id: number
+  is_project: boolean
+  created_at: string
+  updated_at: string
+}
+
 interface Recipe {
   id: number
   name: string
@@ -38,6 +48,7 @@ function App() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [recipes, setRecipes] = useState<Recipe[]>([])
+  const [folders, setFolders] = useState<Folder[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedRecipe, setSelectedRecipe] = useState<string>('all')
   const [selectedProject, setSelectedProject] = useState<string>('all')
@@ -46,23 +57,26 @@ function App() {
 
 const [lastSynced, setLastSynced] = useState<string | null>(null);
 const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
+const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
 
 const fetchData = async () => {
   try {
     setLoading(true);
 
-    const [projectsRes, connectionsRes, jobsRes, recipesRes] =
+    const [projectsRes, connectionsRes, jobsRes, recipesRes, foldersRes] =
   await Promise.all([
     fetch(`${BASE_URL}/api/projects`),
     fetch(`${BASE_URL}/api/connections`),
     fetch(`${BASE_URL}/api/jobs`),
-    fetch(`${BASE_URL}/api/recipes`)
+    fetch(`${BASE_URL}/api/recipes`),
+    fetch(`${BASE_URL}/api/folders`)
   ]);
 
     setProjects(await projectsRes.json());
     setConnections(await connectionsRes.json());
     setJobs(await jobsRes.json());
     setRecipes(await recipesRes.json());
+    setFolders(await foldersRes.json());
 
     setLastSynced(new Date().toLocaleString()); // 👈 update time
   } catch (error) {
@@ -115,6 +129,20 @@ useEffect(() => {
       else next.add(app)
       return next
     })
+  }
+
+  const toggleProject = (projectId: number) => {
+    setExpandedProjects(prev => {
+      const next = new Set(prev)
+      if (next.has(projectId)) next.delete(projectId)
+      else next.add(projectId)
+      return next
+    })
+  }
+
+  const projectFolders = folders.filter(f => f.is_project)
+  const getFoldersByProject = (projectId: number) => {
+    return folders.filter(f => f.project_id === projectId && !f.is_project)
   }
 
   const recipeStats = filteredRecipes.map(r => ({
@@ -312,26 +340,26 @@ useEffect(() => {
       </div>
 
       <div className="table-section">
-        <h3>Recent Projects</h3>
-        <div className="table-container">
-          <table>
-            <thead>
-              <tr>
-                <th>Project Name</th>
-                <th>ID</th>
-                <th>Folder ID</th>
-              </tr>
-            </thead>
-            <tbody>
-              {projects.slice(0, 8).map((project: any, idx) => (
-                <tr key={idx}>
-                  <td>{project.name}</td>
-                  <td>{project.id}</td>
-                  <td>{project.folder_id}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <h3>Projects & Folders</h3>
+        <div className="connections-menu">
+          {projectFolders.map((project) => (
+            <div key={project.id} className="app-group">
+              <div className="app-header" onClick={() => toggleProject(project.id)}>
+                <span className="app-toggle">{expandedProjects.has(project.id) ? '▼' : '▶'}</span>
+                <span className="app-name">{project.name}</span>
+                <span className="app-count">{getFoldersByProject(project.project_id).length}</span>
+              </div>
+              {expandedProjects.has(project.id) && (
+                <div className="connections-list">
+                  {getFoldersByProject(project.project_id).map((folder) => (
+                    <div key={folder.id} className="connection-item">
+                      <span className="connection-name">{folder.name}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       </div>
     </div>
