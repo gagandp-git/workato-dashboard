@@ -57,7 +57,6 @@ function App() {
 
 const [lastSynced, setLastSynced] = useState<string | null>(null);
 const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
-const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set());
 
 const fetchData = async () => {
   try {
@@ -131,19 +130,10 @@ useEffect(() => {
     })
   }
 
-  const toggleProject = (projectId: number) => {
-    setExpandedProjects(prev => {
-      const next = new Set(prev)
-      if (next.has(projectId)) next.delete(projectId)
-      else next.add(projectId)
-      return next
-    })
-  }
+  
 
   const projectFolders = folders.filter(f => f.is_project)
-  const getFoldersByProject = (projectId: number) => {
-    return folders.filter(f => f.project_id === projectId && !f.is_project)
-  }
+ 
 
   const recipeStats = filteredRecipes.map(r => ({
   name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
