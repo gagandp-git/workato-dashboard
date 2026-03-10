@@ -151,9 +151,7 @@ useEffect(() => {
   
 
   const projectFolders = folders.filter(f => f.is_project)
- const getFolders = (parentId: number) => {
-  return folders.filter(f => f.parent_id === parentId)
-}
+
 
   const recipeStats = filteredRecipes.map(r => ({
   name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
