@@ -61,6 +61,9 @@ const [selectedNode, setSelectedNode] = useState<{
 } | null>(null)
 const [lastSynced, setLastSynced] = useState<string | null>(null);
 const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
+const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set())
+const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
+const [folderSearch, setFolderSearch] = useState("")
 
 const fetchData = async () => {
   try {
@@ -147,10 +150,33 @@ useEffect(() => {
       return next
     })
   }
+const toggleProject = (id: number) => {
+  setExpandedProjects(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+}
 
+const toggleFolder = (id: number) => {
+  setExpandedFolders(prev => {
+    const next = new Set(prev)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    return next
+  })
+}
   
 
-  const projectFolders = folders.filter(f => f.is_project)
+ const projectFolders = folders.filter(f => {
+  if (!folderSearch) return f.is_project
+
+  return (
+    f.is_project &&
+    f.name.toLowerCase().includes(folderSearch.toLowerCase())
+  )
+})
 
 
   const recipeStats = filteredRecipes.map(r => ({
@@ -171,34 +197,42 @@ useEffect(() => {
 
   const dailyJobData = Object.values(jobsByDate).slice(-7)
 
-  const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
+const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
 
   const children = folders.filter(f => f.parent_id === parentId)
 
-  return children.map(folder => (
-    <div key={folder.id}>
+  return children.map(folder => {
 
-      <div
-        className="connection-item"
-        style={{
-          paddingLeft: `${level * 18}px`,
-          cursor: "pointer"
-        }}
-        onClick={() =>
-          setSelectedNode({
-            type: "folder",
-            id: folder.id
-          })
-        }
-      >
-        📂 {folder.name}
+    const isExpanded = expandedFolders.has(folder.id)
+
+    return (
+      <div key={folder.id}>
+
+        <div
+          className="connection-item"
+          style={{
+            paddingLeft: `${level * 18}px`,
+            cursor: "pointer"
+          }}
+          onClick={() => {
+            toggleFolder(folder.id)
+
+            setSelectedNode({
+              type: "folder",
+              id: folder.id
+            })
+          }}
+        >
+          {isExpanded ? "▼" : "▶"} 📂 {folder.name}
+        </div>
+
+        {isExpanded && renderFolders(folder.id, level + 1)}
+
       </div>
-
-      {renderFolders(folder.id, level + 1)}
-
-    </div>
-  ))
+    )
+  })
 }
+
   if (loading) {
     return (
       <div className="loading">
@@ -233,46 +267,117 @@ useEffect(() => {
       </header>
 
       <div className="filters">
-        <div className="filter-group">
-          <label>Project:</label>
-          <select value={selectedProject} onChange={(e) => setSelectedProject(e.target.value)}>
-            <option value="all">All Projects</option>
-            {projects.map((p: any) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
-        </div>
 
-        <div className="filter-group">
-          <label>Recipe:</label>
-          <select value={selectedRecipe} onChange={(e) => setSelectedRecipe(e.target.value)}>
-            <option value="all">All Recipes</option>
-            {recipes.filter(r => 
-  selectedProject === 'all' || 
-  r.project_id === Number(selectedProject)
-).map((r: any) => (
-              <option key={r.id} value={r.id}>{r.name}</option>
-            ))}
-          </select>
-        </div>
+  {/* SEARCH */}
+  <div className="filter-group">
+    <label>Search:</label>
+    <input
+      type="text"
+      placeholder="Search project or folder..."
+      value={folderSearch}
+      onChange={(e) => setFolderSearch(e.target.value)}
+    />
+  </div>
 
-        <div className="filter-group">
-          <label>Start Date:</label>
-          <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
-        </div>
+  {/* PROJECT + FOLDER TREE */}
+  <div className="filter-group" style={{ minWidth: "260px" }}>
+    <label>Projects / Folders:</label>
 
-        <div className="filter-group">
-          <label>End Date:</label>
-          <input type="date" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-        </div>
+    <div className="folder-tree">
 
-        <button className="reset-btn" onClick={() => {
-          setSelectedRecipe('all')
-          setSelectedProject('all')
-          setStartDate('')
-          setEndDate('')
-        }}>Reset Filters</button>
-      </div>
+      {projectFolders
+        .filter(p =>
+          !folderSearch ||
+          p.name.toLowerCase().includes(folderSearch.toLowerCase())
+        )
+        .map(project => {
+
+          const isExpanded = expandedProjects.has(project.id)
+
+          return (
+            <div key={project.id}>
+
+              <div
+                className="connection-item"
+                style={{ cursor: "pointer", fontWeight: "bold" }}
+                onClick={() => {
+
+                  toggleProject(project.id)
+
+                  setSelectedNode({
+                    type: "project",
+                    id: project.id
+                  })
+
+                }}
+              >
+                {isExpanded ? "▼" : "▶"} 📁 {project.name}
+              </div>
+
+              {isExpanded && renderFolders(project.id)}
+
+            </div>
+          )
+
+        })}
+
+    </div>
+  </div>
+
+  {/* RECIPE FILTER */}
+  <div className="filter-group">
+    <label>Recipe:</label>
+
+    <select
+      value={selectedRecipe}
+      onChange={(e) => setSelectedRecipe(e.target.value)}
+    >
+
+      <option value="all">All Recipes</option>
+
+      {filteredRecipesByNode.map(recipe => (
+        <option key={recipe.id} value={recipe.id}>
+          {recipe.name}
+        </option>
+      ))}
+
+    </select>
+  </div>
+
+  {/* START DATE */}
+  <div className="filter-group">
+    <label>Start Date:</label>
+    <input
+      type="date"
+      value={startDate}
+      onChange={(e) => setStartDate(e.target.value)}
+    />
+  </div>
+
+  {/* END DATE */}
+  <div className="filter-group">
+    <label>End Date:</label>
+    <input
+      type="date"
+      value={endDate}
+      onChange={(e) => setEndDate(e.target.value)}
+    />
+  </div>
+
+  {/* RESET */}
+  <button
+    className="reset-btn"
+    onClick={() => {
+      setSelectedRecipe("all")
+      setSelectedNode(null)
+      setStartDate("")
+      setEndDate("")
+    }}
+  >
+    Reset Filters
+  </button>
+
+</div>
 
       <div className="stats-grid">
         <div className="stat-card">
@@ -374,54 +479,6 @@ useEffect(() => {
           </ResponsiveContainer>
         </div>
       </div>
-
-      <div className="table-section">
-  <h3>Projects & Folders</h3>
-
-  <div className="connections-menu">
-    {projectFolders.map((project) => (
-
-  <div key={project.id} className="app-group">
-
-    <div
-      className="app-header"
-      style={{ cursor: "pointer" }}
-      onClick={() =>
-        setSelectedNode({
-          type: "project",
-          id: project.id
-        })
-      }
-    >
-      <span className="app-name">📁 {project.name}</span>
-    </div>
-
-    {renderFolders(project.id)}
-
-  </div>
-
-))}
-  </div>
-</div>
-<div className="table-section">
-  <h3>Recipes</h3>
-
-  <div className="connections-menu">
-
-    {!selectedNode && (
-  <div className="connection-item">
-    Select project or folder
-  </div>
-)}
-
-    {filteredRecipesByNode.map(recipe => (
-      <div key={recipe.id} className="connection-item">
-        📄 {recipe.name}
-      </div>
-    ))}
-
-  </div>
-</div>
     </div>
   )
 }

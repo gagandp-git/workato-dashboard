@@ -34,6 +34,18 @@
   box-shadow: 0 10px 30px rgba(0,0,0,0.1);
 }
 
+.folder-tree {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  padding: 6px;
+  border-radius: 6px;
+}
+
+.folder-tree .connection-item {
+  font-size: 14px;
+}
+
 .filter-group {
   display: flex;
   flex-direction: column;
