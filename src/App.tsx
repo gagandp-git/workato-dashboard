@@ -52,7 +52,7 @@ function App() {
   const [folders, setFolders] = useState<Folder[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedRecipe, setSelectedRecipe] = useState<string>('all')
-  const [selectedProject, setSelectedProject] = useState<string>('all')
+  
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
 const [selectedNode, setSelectedNode] = useState<{
@@ -110,12 +110,7 @@ useEffect(() => {
     return match
   })
 
-  const filteredRecipes = recipes.filter(recipe => {
-  if (selectedProject !== 'all' && recipe.project_id !== Number(selectedProject)) 
-    return false
-  return true
-})
-
+ 
   const jobStats = {
     total: filteredJobs.length,
     succeeded: filteredJobs.filter(j => j.status === 'succeeded').length,
@@ -123,7 +118,8 @@ useEffect(() => {
   }
 
   const filteredRecipesByNode = recipes.filter(r => {
-  if (!selectedNode) return false
+
+  if (!selectedNode) return true
 
   if (selectedNode.type === "project") {
     return r.project_id === selectedNode.id
@@ -133,7 +129,7 @@ useEffect(() => {
     return r.folder_id === selectedNode.id
   }
 
-  return false
+  return true
 })
   
   const connectionByApp = connections.reduce((acc, conn) => {
@@ -179,7 +175,7 @@ const toggleFolder = (id: number) => {
 })
 
 
-  const recipeStats = filteredRecipes.map(r => ({
+ const recipeStats = filteredRecipesByNode.map(r => ({
   name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
   succeeded: r.job_succeeded_count || 0,
   failed: r.job_failed_count || 0
@@ -336,7 +332,7 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
       <option value="all">All Recipes</option>
 
       {filteredRecipesByNode.map(recipe => (
-        <option key={recipe.id} value={recipe.id}>
+        <option key={recipe.id} value={String(recipe.id)}>
           {recipe.name}
         </option>
       ))}
