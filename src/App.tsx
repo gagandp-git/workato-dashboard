@@ -64,7 +64,7 @@ const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
 const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set())
 const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
 const [folderSearch, setFolderSearch] = useState("")
-const [isFolderSearchFocused, setIsFolderSearchFocused] = useState(false)
+const [isFolderTreeExpanded, setIsFolderTreeExpanded] = useState(false)
 
 const fetchData = async () => {
   try {
@@ -127,6 +127,16 @@ useEffect(() => {
   }
 
   if (selectedNode.type === "folder") {
+    // Match by folder_id in recipe
+    const folder = folders.find(f => f.id === selectedNode.id)
+    if (!folder) return false
+    
+    // If it's a project folder, match by project_id
+    if (folder.is_project) {
+      return r.project_id === folder.project_id
+    }
+    
+    // Otherwise match by folder_id
     return r.folder_id === selectedNode.id
   }
 
@@ -268,7 +278,7 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
       <div className="filters">
 
   {/* PROJECT + FOLDER TREE */}
-  <div className="filter-group" style={{ minWidth: "260px" }}>
+  <div className="filter-group" style={{ minWidth: "260px", position: "relative" }}>
     <label>Projects / Folders:</label>
 
     {/* SEARCH BAR INSIDE */}
@@ -277,63 +287,73 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
       placeholder="Search project or folder..."
       value={folderSearch}
       onChange={(e) => setFolderSearch(e.target.value)}
-      onFocus={() => setIsFolderSearchFocused(true)}
-      onBlur={() => setTimeout(() => setIsFolderSearchFocused(false), 200)}
+      onFocus={() => setIsFolderTreeExpanded(true)}
       style={{ marginBottom: "8px" }}
     />
 
-    <div className="folder-tree" style={{
-      maxHeight: folderSearch || isFolderSearchFocused ? "250px" : "38px",
-      transition: "max-height 0.3s ease"
-    }}>
-
-      {folderSearch ? (
-        // SEARCH RESULTS - Show all matching folders
-        getMatchingFolders().map(folder => (
-          <div
-            key={folder.id}
-            className="connection-item"
-            style={{ cursor: "pointer", paddingLeft: "10px" }}
-            onClick={() => {
-              setSelectedNode({
-                type: "folder",
-                id: folder.id
-              })
-            }}
-          >
-            {folder.is_project ? "📁" : "📂"} {folder.name}
-          </div>
-        ))
-      ) : (
-        // NORMAL TREE VIEW
-        projectFolders.map(project => {
-          const isExpanded = expandedProjects.has(project.id)
-
-          return (
-            <div key={project.id}>
-
-              <div
-                className="connection-item"
-                style={{ cursor: "pointer", fontWeight: "bold" }}
-                onClick={() => {
-                  toggleProject(project.id)
-                  setSelectedNode({
-                    type: "project",
-                    id: project.id
-                  })
-                }}
-              >
-                {isExpanded ? "▼" : "▶"} 📁 {project.name}
-              </div>
-
-              {isExpanded && renderFolders(project.id)}
-
+    {isFolderTreeExpanded && (
+      <div className="folder-tree-dropdown">
+        {folderSearch ? (
+          // SEARCH RESULTS - Show all matching folders
+          getMatchingFolders().map(folder => (
+            <div
+              key={folder.id}
+              className="connection-item"
+              style={{ cursor: "pointer", paddingLeft: "10px" }}
+              onClick={() => {
+                setSelectedNode({
+                  type: "folder",
+                  id: folder.id
+                })
+              }}
+            >
+              {folder.is_project ? "📁" : "📂"} {folder.name}
             </div>
-          )
-        })
-      )}
+          ))
+        ) : (
+          // NORMAL TREE VIEW
+          projectFolders.map(project => {
+            const isExpanded = expandedProjects.has(project.id)
 
-    </div>
+            return (
+              <div key={project.id}>
+
+                <div
+                  className="connection-item"
+                  style={{ cursor: "pointer", fontWeight: "bold" }}
+                  onClick={() => {
+                    toggleProject(project.id)
+                    setSelectedNode({
+                      type: "project",
+                      id: project.id
+                    })
+                  }}
+                >
+                  {isExpanded ? "▼" : "▶"} 📁 {project.name}
+                </div>
+
+                {isExpanded && renderFolders(project.id)}
+
+              </div>
+            )
+          })
+        )}
+      </div>
+    )}
+
+    {/* COLLAPSED VIEW - Show selected item */}
+    {!isFolderTreeExpanded && (
+      <div 
+        className="folder-tree-collapsed"
+        onClick={() => setIsFolderTreeExpanded(true)}
+      >
+        {selectedNode ? (
+          folders.find(f => f.id === selectedNode.id)?.name || "Select..."
+        ) : (
+          "Click to select..."
+        )}
+      </div>
+    )}
   </div>
 
   {/* RECIPE FILTER */}
@@ -384,6 +404,8 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
       setSelectedNode(null)
       setStartDate("")
       setEndDate("")
+      setIsFolderTreeExpanded(false)
+      setFolderSearch("")
     }}
   >
     Reset Filters

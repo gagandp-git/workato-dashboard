@@ -50,6 +50,46 @@
   text-overflow: ellipsis;
 }
 
+.folder-tree-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  max-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: white;
+  border: 2px solid #11998e;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1000;
+  margin-top: 4px;
+}
+
+.folder-tree-dropdown .connection-item {
+  font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  padding: 0.5rem 1rem;
+}
+
+.folder-tree-collapsed {
+  padding: 0.75rem;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  cursor: pointer;
+  background: white;
+  transition: border-color 0.3s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.folder-tree-collapsed:hover {
+  border-color: #11998e;
+}
+
 .filter-group {
   display: flex;
   flex-direction: column;
