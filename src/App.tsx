@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import './App.css'
 const BASE_URL = import.meta.env.VITE_API_URL as string;
@@ -65,6 +65,7 @@ const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set())
 const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
 const [folderSearch, setFolderSearch] = useState("")
 const [isFolderTreeExpanded, setIsFolderTreeExpanded] = useState(false)
+const folderDropdownRef = useRef<HTMLDivElement>(null)
 
 const fetchData = async () => {
   try {
@@ -96,6 +97,22 @@ const fetchData = async () => {
 useEffect(() => {
   fetchData();
 }, []);
+
+useEffect(() => {
+  const handleClickOutside = (event: MouseEvent) => {
+    if (folderDropdownRef.current && !folderDropdownRef.current.contains(event.target as Node)) {
+      setIsFolderTreeExpanded(false)
+    }
+  }
+
+  if (isFolderTreeExpanded) {
+    document.addEventListener('mousedown', handleClickOutside)
+  }
+
+  return () => {
+    document.removeEventListener('mousedown', handleClickOutside)
+  }
+}, [isFolderTreeExpanded])
 
   const connectionStats = {
     total: connections.length,
@@ -182,8 +199,24 @@ const toggleFolder = (id: number) => {
   if (!folderSearch) return []
   
   const searchLower = folderSearch.toLowerCase()
-  return folders.filter(f => 
+  const matchingFolders = folders.filter(f => 
     f.name.toLowerCase().includes(searchLower)
+  )
+  
+  // Get all parent IDs of matching folders
+  const parentIds = new Set<number>()
+  matchingFolders.forEach(folder => {
+    let currentFolder = folder
+    while (currentFolder.parent_id) {
+      parentIds.add(currentFolder.parent_id)
+      currentFolder = folders.find(f => f.id === currentFolder.parent_id)!
+      if (!currentFolder) break
+    }
+  })
+  
+  // Return matching folders + their parents
+  return folders.filter(f => 
+    matchingFolders.includes(f) || parentIds.has(f.id)
   )
 }
 
@@ -213,6 +246,7 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
   return children.map(folder => {
 
     const isExpanded = expandedFolders.has(folder.id)
+    const isMatching = folderSearch && folder.name.toLowerCase().includes(folderSearch.toLowerCase())
 
     return (
       <div key={folder.id}>
@@ -221,7 +255,8 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
           className="connection-item"
           style={{
             paddingLeft: `${level * 18}px`,
-            cursor: "pointer"
+            cursor: "pointer",
+            backgroundColor: isMatching ? "#fffacd" : "transparent"
           }}
           onClick={() => {
             toggleFolder(folder.id)
@@ -278,7 +313,7 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
       <div className="filters">
 
   {/* PROJECT + FOLDER TREE */}
-  <div className="filter-group" style={{ minWidth: "260px", position: "relative" }}>
+  <div className="filter-group" style={{ minWidth: "260px", position: "relative" }} ref={folderDropdownRef}>
     <label>Projects / Folders:</label>
 
     {/* SEARCH BAR INSIDE */}
@@ -294,22 +329,41 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
     {isFolderTreeExpanded && (
       <div className="folder-tree-dropdown">
         {folderSearch ? (
-          // SEARCH RESULTS - Show all matching folders
-          getMatchingFolders().map(folder => (
-            <div
-              key={folder.id}
-              className="connection-item"
-              style={{ cursor: "pointer", paddingLeft: "10px" }}
-              onClick={() => {
-                setSelectedNode({
-                  type: "folder",
-                  id: folder.id
-                })
-              }}
-            >
-              {folder.is_project ? "📁" : "📂"} {folder.name}
-            </div>
-          ))
+          // SEARCH RESULTS - Show matching folders with hierarchy
+          (() => {
+            const matchingFolders = getMatchingFolders()
+            const projectsWithMatches = projectFolders.filter(p => 
+              matchingFolders.some(f => f.id === p.id || f.project_id === p.project_id)
+            )
+            
+            return projectsWithMatches.map(project => {
+              const isExpanded = expandedProjects.has(project.id)
+              const isMatching = project.name.toLowerCase().includes(folderSearch.toLowerCase())
+              
+              return (
+                <div key={project.id}>
+                  <div
+                    className="connection-item"
+                    style={{ 
+                      cursor: "pointer", 
+                      fontWeight: "bold",
+                      backgroundColor: isMatching ? "#fffacd" : "transparent"
+                    }}
+                    onClick={() => {
+                      toggleProject(project.id)
+                      setSelectedNode({
+                        type: "project",
+                        id: project.id
+                      })
+                    }}
+                  >
+                    {isExpanded ? "▼" : "▶"} 📁 {project.name}
+                  </div>
+                  {isExpanded && renderFolders(project.id)}
+                </div>
+              )
+            })
+          })()
         ) : (
           // NORMAL TREE VIEW
           projectFolders.map(project => {
