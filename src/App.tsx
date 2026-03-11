@@ -64,6 +64,7 @@ const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
 const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set())
 const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
 const [folderSearch, setFolderSearch] = useState("")
+const [isFolderSearchFocused, setIsFolderSearchFocused] = useState(false)
 
 const fetchData = async () => {
   try {
@@ -165,14 +166,16 @@ const toggleFolder = (id: number) => {
 }
   
 
- const projectFolders = folders.filter(f => {
-  if (!folderSearch) return f.is_project
+ const projectFolders = folders.filter(f => f.is_project)
 
-  return (
-    f.is_project &&
-    f.name.toLowerCase().includes(folderSearch.toLowerCase())
+ const getMatchingFolders = () => {
+  if (!folderSearch) return []
+  
+  const searchLower = folderSearch.toLowerCase()
+  return folders.filter(f => 
+    f.name.toLowerCase().includes(searchLower)
   )
-})
+}
 
 
  const recipeStats = filteredRecipesByNode.map(r => ({
@@ -264,30 +267,46 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
 
       <div className="filters">
 
-  {/* SEARCH */}
-  <div className="filter-group">
-    <label>Search:</label>
+  {/* PROJECT + FOLDER TREE */}
+  <div className="filter-group" style={{ minWidth: "260px" }}>
+    <label>Projects / Folders:</label>
+
+    {/* SEARCH BAR INSIDE */}
     <input
       type="text"
       placeholder="Search project or folder..."
       value={folderSearch}
       onChange={(e) => setFolderSearch(e.target.value)}
+      onFocus={() => setIsFolderSearchFocused(true)}
+      onBlur={() => setTimeout(() => setIsFolderSearchFocused(false), 200)}
+      style={{ marginBottom: "8px" }}
     />
-  </div>
 
-  {/* PROJECT + FOLDER TREE */}
-  <div className="filter-group" style={{ minWidth: "260px" }}>
-    <label>Projects / Folders:</label>
+    <div className="folder-tree" style={{
+      maxHeight: folderSearch || isFolderSearchFocused ? "250px" : "38px",
+      transition: "max-height 0.3s ease"
+    }}>
 
-    <div className="folder-tree">
-
-      {projectFolders
-        .filter(p =>
-          !folderSearch ||
-          p.name.toLowerCase().includes(folderSearch.toLowerCase())
-        )
-        .map(project => {
-
+      {folderSearch ? (
+        // SEARCH RESULTS - Show all matching folders
+        getMatchingFolders().map(folder => (
+          <div
+            key={folder.id}
+            className="connection-item"
+            style={{ cursor: "pointer", paddingLeft: "10px" }}
+            onClick={() => {
+              setSelectedNode({
+                type: "folder",
+                id: folder.id
+              })
+            }}
+          >
+            {folder.is_project ? "📁" : "📂"} {folder.name}
+          </div>
+        ))
+      ) : (
+        // NORMAL TREE VIEW
+        projectFolders.map(project => {
           const isExpanded = expandedProjects.has(project.id)
 
           return (
@@ -297,14 +316,11 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
                 className="connection-item"
                 style={{ cursor: "pointer", fontWeight: "bold" }}
                 onClick={() => {
-
                   toggleProject(project.id)
-
                   setSelectedNode({
                     type: "project",
                     id: project.id
                   })
-
                 }}
               >
                 {isExpanded ? "▼" : "▶"} 📁 {project.name}
@@ -314,8 +330,8 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
 
             </div>
           )
-
-        })}
+        })
+      )}
 
     </div>
   </div>

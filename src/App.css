@@ -35,15 +35,19 @@
 }
 
 .folder-tree {
-  max-height: 200px;
   overflow-y: auto;
+  overflow-x: hidden;
   border: 1px solid #eee;
   padding: 6px;
   border-radius: 6px;
+  transition: max-height 0.3s ease;
 }
 
 .folder-tree .connection-item {
   font-size: 14px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .filter-group {
