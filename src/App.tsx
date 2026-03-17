@@ -8,6 +8,7 @@ interface RecipeConnection {
   recipe_name: string
   connection_id: number
   connection_name: string
+  application: string
 }
 
 interface Connection {
@@ -220,28 +221,39 @@ function App() {
   }
 
   // ── Dependency graph logic ───────────────────────────────────
-  const uniqueApps = [...new Set(connections.map(c => c.application))].filter(Boolean)
+  // Derive unique apps solely from recipe_connections.application
+  const uniqueApps = [...new Set(recipeConnections.map(rc => rc.application).filter(Boolean))]
   const filteredApps = uniqueApps.filter(app => app.toLowerCase().includes(appSearch.toLowerCase()))
-  const getConnectionsForApp = (app: string) => connections.filter(c => c.application === app)
+  const getConnectionsForApp = (app: string) =>
+    [...new Map(
+      recipeConnections.filter(rc => rc.application === app).map(rc => [rc.connection_name, rc])
+    ).values()]
 
   const renderDependencyGraph = () => {
+    // ── Overview: search box + app cards grid ──
     if (!selectedApp) {
       return (
         <div className="dep-container">
-          <div className="dep-filters" ref={appSearchRef}>
+          <div className="dep-header-row" ref={appSearchRef}>
             <div className="dep-search-wrap">
+              <span className="dep-search-icon">🔍</span>
               <input
                 className="dep-search-input"
-                placeholder="🔍 Search application..."
+                placeholder="Search application (e.g. salesforce, snowflake, rest)..."
                 value={appSearch}
-                onChange={e => setAppSearch(e.target.value)}
+                onChange={e => { setAppSearch(e.target.value); setAppSearchOpen(true) }}
                 onFocus={() => setAppSearchOpen(true)}
               />
+              {appSearch && (
+                <button className="dep-search-clear" onClick={() => { setAppSearch(''); setAppSearchOpen(false) }}>✕</button>
+              )}
               {appSearchOpen && filteredApps.length > 0 && (
                 <div className="dep-search-dropdown">
                   {filteredApps.map(app => (
                     <div key={app} className="dep-search-item" onClick={() => { setSelectedApp(app); setAppSearch(''); setAppSearchOpen(false) }}>
-                      🔌 {app}
+                      <span className="dep-search-item-icon">🔌</span>
+                      <span className="dep-search-item-name">{app}</span>
+                      <span className="dep-search-item-count">{getConnectionsForApp(app).length} conn</span>
                     </div>
                   ))}
                 </div>
@@ -263,40 +275,78 @@ function App() {
       )
     }
 
+    // ── Drill-down: tree layout ──
     const appConnections = getConnectionsForApp(selectedApp)
 
     return (
       <div className="dep-container">
-        <div className="dep-filters">
+        {/* toolbar */}
+        <div className="dep-toolbar">
           <button className="dep-back-btn" onClick={() => setSelectedApp(null)}>← Back</button>
-          <span className="dep-selected-app">🔌 {selectedApp}</span>
+          <div className="dep-breadcrumb">
+            <span className="dep-breadcrumb-root" onClick={() => setSelectedApp(null)}>All Apps</span>
+            <span className="dep-breadcrumb-sep">›</span>
+            <span className="dep-breadcrumb-current">🔌 {selectedApp}</span>
+          </div>
         </div>
 
-        <div className="dep-graph">
-          <div className="dep-level">
-            <div className="dep-node dep-node-app">{selectedApp}</div>
+        {/* tree */}
+        <div className="dep-tree">
+          {/* root node */}
+          <div className="dep-tree-root">
+            <div className="dep-node dep-node-app">
+              <span className="dep-node-icon">🔌</span>
+              <span className="dep-node-label">{selectedApp}</span>
+              <span className="dep-node-badge">{appConnections.length}</span>
+            </div>
           </div>
-          <div className="dep-arrow">↓</div>
-          <div className="dep-level">
+
+          {/* connector line root → connections */}
+          {appConnections.length > 0 && <div className="dep-vline dep-vline-root"></div>}
+
+          {/* horizontal spread line */}
+          {appConnections.length > 1 && (
+            <div className="dep-hline-wrap">
+              <div className="dep-hline"></div>
+            </div>
+          )}
+
+          {/* connection columns */}
+          <div className="dep-conn-row">
             {appConnections.map(conn => {
               const connRecipes = [...new Set(
-                recipeConnections.filter(rc => rc.connection_name === conn.name).map(rc => rc.recipe_name)
+                recipeConnections.filter(rc => rc.connection_name === conn.connection_name).map(rc => rc.recipe_name)
               )]
+              // look up auth status from connections table if available
+              const connDetail = connections.find(c => c.name === conn.connection_name)
+              const isOk = connDetail?.authorization_status === 'success'
               return (
-                <div key={conn.name} className="dep-branch">
-                  <div className={`dep-node dep-node-conn ${conn.authorization_status === 'success' ? 'dep-conn-ok' : 'dep-conn-fail'}`}>
-                    <span className="dep-status-dot"></span>
-                    {conn.name}
+                <div key={conn.connection_name} className="dep-conn-col">
+                  {/* vertical line from hline to conn node */}
+                  <div className="dep-vline dep-vline-conn"></div>
+
+                  {/* connection node */}
+                  <div className={`dep-node dep-node-conn ${connDetail ? (isOk ? 'dep-conn-ok' : 'dep-conn-fail') : ''}`}>
+                    {connDetail && <span className={`dep-status-dot ${isOk ? 'dot-ok' : 'dot-fail'}`}></span>}
+                    <span className="dep-node-label">{conn.connection_name}</span>
                   </div>
+
+                  {/* recipes sub-tree */}
                   {connRecipes.length > 0 && (
                     <>
-                      <div className="dep-arrow">↓</div>
-                      <div className="dep-recipes">
+                      <div className="dep-vline dep-vline-recipe"></div>
+                      <div className="dep-recipes-col">
                         {connRecipes.map(rname => (
-                          <div key={rname} className="dep-node dep-node-recipe">📋 {rname}</div>
+                          <div key={rname} className="dep-node dep-node-recipe">
+                            <span className="dep-node-icon">📋</span>
+                            <span className="dep-node-label">{rname}</span>
+                          </div>
                         ))}
                       </div>
                     </>
+                  )}
+                  {connRecipes.length === 0 && (
+                    <div className="dep-no-recipes">no recipes</div>
                   )}
                 </div>
               )
