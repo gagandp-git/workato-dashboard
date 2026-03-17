@@ -3,6 +3,13 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import './App.css'
 const BASE_URL = import.meta.env.VITE_API_URL as string;
 
+interface RecipeConnection {
+  recipe_id: number
+  recipe_name: string
+  connection_id: number
+  connection_name: string
+}
+
 interface Connection {
   application: string
   name: string
@@ -43,77 +50,72 @@ interface Recipe {
   folder_id: number
 }
 
-
 function App() {
   const [connections, setConnections] = useState<Connection[]>([])
   const [jobs, setJobs] = useState<Job[]>([])
   const [projects, setProjects] = useState<Project[]>([])
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
+  const [recipeConnections, setRecipeConnections] = useState<RecipeConnection[]>([])
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'dependency'>('dashboard')
   const [loading, setLoading] = useState(true)
   const [selectedRecipe, setSelectedRecipe] = useState<string>('all')
-  
   const [startDate, setStartDate] = useState<string>('')
   const [endDate, setEndDate] = useState<string>('')
-const [selectedNode, setSelectedNode] = useState<{
-  type: "project" | "folder"
-  id: number
-} | null>(null)
-const [lastSynced, setLastSynced] = useState<string | null>(null);
-const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set());
-const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set())
-const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
-const [folderSearch, setFolderSearch] = useState("")
-const [isFolderTreeExpanded, setIsFolderTreeExpanded] = useState(false)
-const folderDropdownRef = useRef<HTMLDivElement>(null)
+  const [selectedNode, setSelectedNode] = useState<{ type: 'project' | 'folder'; id: number } | null>(null)
+  const [lastSynced, setLastSynced] = useState<string | null>(null)
+  const [expandedApps, setExpandedApps] = useState<Set<string>>(new Set())
+  const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set())
+  const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
+  const [folderSearch, setFolderSearch] = useState('')
+  const [isFolderTreeExpanded, setIsFolderTreeExpanded] = useState(false)
+  const [selectedApp, setSelectedApp] = useState<string | null>(null)
+  const [appSearch, setAppSearch] = useState('')
+  const [appSearchOpen, setAppSearchOpen] = useState(false)
+  const folderDropdownRef = useRef<HTMLDivElement>(null)
+  const appSearchRef = useRef<HTMLDivElement>(null)
 
-const fetchData = async () => {
-  try {
-    setLoading(true);
-
-    const [projectsRes, connectionsRes, jobsRes, recipesRes, foldersRes] =
-  await Promise.all([
-    fetch(`${BASE_URL}/api/projects`),
-    fetch(`${BASE_URL}/api/connections`),
-    fetch(`${BASE_URL}/api/jobs`),
-    fetch(`${BASE_URL}/api/recipes`),
-    fetch(`${BASE_URL}/api/folders`)
-  ]);
-
-    setProjects(await projectsRes.json());
-    setConnections(await connectionsRes.json());
-    setJobs(await jobsRes.json());
-    setRecipes(await recipesRes.json());
-    setFolders(await foldersRes.json());
-
-    setLastSynced(new Date().toLocaleString()); // 👈 update time
-  } catch (error) {
-    console.error("Error fetching data:", error);
-  } finally {
-    setLoading(false);
-  }
-};
-  
-useEffect(() => {
-  fetchData();
-}, []);
-
-useEffect(() => {
-  const handleClickOutside = (event: MouseEvent) => {
-    if (folderDropdownRef.current && !folderDropdownRef.current.contains(event.target as Node)) {
-      setIsFolderTreeExpanded(false)
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      const [projectsRes, connectionsRes, jobsRes, recipesRes, foldersRes, rcRes] = await Promise.all([
+        fetch(`${BASE_URL}/api/projects`),
+        fetch(`${BASE_URL}/api/connections`),
+        fetch(`${BASE_URL}/api/jobs`),
+        fetch(`${BASE_URL}/api/recipes`),
+        fetch(`${BASE_URL}/api/folders`),
+        fetch(`${BASE_URL}/api/recipe_connections`)
+      ])
+      setProjects(await projectsRes.json())
+      setConnections(await connectionsRes.json())
+      setJobs(await jobsRes.json())
+      setRecipes(await recipesRes.json())
+      setFolders(await foldersRes.json())
+      setRecipeConnections(await rcRes.json())
+      setLastSynced(new Date().toLocaleString())
+    } catch (error) {
+      console.error('Error fetching data:', error)
+    } finally {
+      setLoading(false)
     }
   }
 
-  if (isFolderTreeExpanded) {
+  useEffect(() => { fetchData() }, [])
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (folderDropdownRef.current && !folderDropdownRef.current.contains(event.target as Node)) {
+        setIsFolderTreeExpanded(false)
+      }
+      if (appSearchRef.current && !appSearchRef.current.contains(event.target as Node)) {
+        setAppSearchOpen(false)
+      }
+    }
     document.addEventListener('mousedown', handleClickOutside)
-  }
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
-  return () => {
-    document.removeEventListener('mousedown', handleClickOutside)
-  }
-}, [isFolderTreeExpanded])
-
+  // ── Dashboard logic ──────────────────────────────────────────
   const connectionStats = {
     total: connections.length,
     active: connections.filter(c => c.authorization_status === 'success').length,
@@ -128,7 +130,6 @@ useEffect(() => {
     return match
   })
 
- 
   const jobStats = {
     total: filteredJobs.length,
     succeeded: filteredJobs.filter(j => j.status === 'succeeded').length,
@@ -136,96 +137,56 @@ useEffect(() => {
   }
 
   const filteredRecipesByNode = recipes.filter(r => {
-
-  if (!selectedNode) return true
-
-  if (selectedNode.type === "project") {
-    return r.project_id === selectedNode.id
-  }
-
-  if (selectedNode.type === "folder") {
-    // Match by folder_id in recipe
-    const folder = folders.find(f => f.id === selectedNode.id)
-    if (!folder) return false
-    
-    // If it's a project folder, match by project_id
-    if (folder.is_project) {
-      return r.project_id === folder.project_id
+    if (!selectedNode) return true
+    if (selectedNode.type === 'project') return r.project_id === selectedNode.id
+    if (selectedNode.type === 'folder') {
+      const folder = folders.find(f => f.id === selectedNode.id)
+      if (!folder) return false
+      if (folder.is_project) return r.project_id === folder.project_id
+      return r.folder_id === selectedNode.id
     }
-    
-    // Otherwise match by folder_id
-    return r.folder_id === selectedNode.id
-  }
+    return true
+  })
 
-  return true
-})
-  
   const connectionByApp = connections.reduce((acc, conn) => {
     if (!acc[conn.application]) acc[conn.application] = []
     acc[conn.application].push(conn)
     return acc
   }, {} as Record<string, Connection[]>)
 
-  const toggleApp = (app: string) => {
-    setExpandedApps(prev => {
-      const next = new Set(prev)
-      if (next.has(app)) next.delete(app)
-      else next.add(app)
-      return next
+  const toggleApp = (app: string) => setExpandedApps(prev => {
+    const next = new Set(prev); next.has(app) ? next.delete(app) : next.add(app); return next
+  })
+  const toggleProject = (id: number) => setExpandedProjects(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
+  })
+  const toggleFolder = (id: number) => setExpandedFolders(prev => {
+    const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
+  })
+
+  const projectFolders = folders.filter(f => f.is_project)
+
+  const getMatchingFolders = () => {
+    if (!folderSearch) return []
+    const searchLower = folderSearch.toLowerCase()
+    const matchingFolders = folders.filter(f => f.name.toLowerCase().includes(searchLower))
+    const parentIds = new Set<number>()
+    matchingFolders.forEach(folder => {
+      let cur = folder
+      while (cur.parent_id) {
+        parentIds.add(cur.parent_id)
+        cur = folders.find(f => f.id === cur.parent_id)!
+        if (!cur) break
+      }
     })
+    return folders.filter(f => matchingFolders.includes(f) || parentIds.has(f.id))
   }
-const toggleProject = (id: number) => {
-  setExpandedProjects(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  })
-}
 
-const toggleFolder = (id: number) => {
-  setExpandedFolders(prev => {
-    const next = new Set(prev)
-    if (next.has(id)) next.delete(id)
-    else next.add(id)
-    return next
-  })
-}
-  
-
- const projectFolders = folders.filter(f => f.is_project)
-
- const getMatchingFolders = () => {
-  if (!folderSearch) return []
-  
-  const searchLower = folderSearch.toLowerCase()
-  const matchingFolders = folders.filter(f => 
-    f.name.toLowerCase().includes(searchLower)
-  )
-  
-  // Get all parent IDs of matching folders
-  const parentIds = new Set<number>()
-  matchingFolders.forEach(folder => {
-    let currentFolder = folder
-    while (currentFolder.parent_id) {
-      parentIds.add(currentFolder.parent_id)
-      currentFolder = folders.find(f => f.id === currentFolder.parent_id)!
-      if (!currentFolder) break
-    }
-  })
-  
-  // Return matching folders + their parents
-  return folders.filter(f => 
-    matchingFolders.includes(f) || parentIds.has(f.id)
-  )
-}
-
-
- const recipeStats = filteredRecipesByNode.map(r => ({
-  name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
-  succeeded: r.job_succeeded_count || 0,
-  failed: r.job_failed_count || 0
-})).slice(0, 5)
+  const recipeStats = filteredRecipesByNode.map(r => ({
+    name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
+    succeeded: r.job_succeeded_count || 0,
+    failed: r.job_failed_count || 0
+  })).slice(0, 5)
 
   const jobsByDate = filteredJobs.reduce((acc, job) => {
     if (job.completed_at) {
@@ -239,43 +200,112 @@ const toggleFolder = (id: number) => {
 
   const dailyJobData = Object.values(jobsByDate).slice(-7)
 
-const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
+  const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
+    return folders.filter(f => f.parent_id === parentId).map(folder => {
+      const isExpanded = expandedFolders.has(folder.id)
+      const isMatching = !!(folderSearch && folder.name.toLowerCase().includes(folderSearch.toLowerCase()))
+      return (
+        <div key={folder.id}>
+          <div
+            className="connection-item"
+            style={{ paddingLeft: `${level * 18}px`, cursor: 'pointer', backgroundColor: isMatching ? '#fffacd' : 'transparent' }}
+            onClick={() => { toggleFolder(folder.id); setSelectedNode({ type: 'folder', id: folder.id }) }}
+          >
+            {isExpanded ? '▼' : '▶'} 📂 {folder.name}
+          </div>
+          {isExpanded && renderFolders(folder.id, level + 1)}
+        </div>
+      )
+    })
+  }
 
-  const children = folders.filter(f => f.parent_id === parentId)
+  // ── Dependency graph logic ───────────────────────────────────
+  const uniqueApps = [...new Set(connections.map(c => c.application))].filter(Boolean)
+  const filteredApps = uniqueApps.filter(app => app.toLowerCase().includes(appSearch.toLowerCase()))
+  const getConnectionsForApp = (app: string) => connections.filter(c => c.application === app)
 
-  return children.map(folder => {
+  const renderDependencyGraph = () => {
+    if (!selectedApp) {
+      return (
+        <div className="dep-container">
+          <div className="dep-filters" ref={appSearchRef}>
+            <div className="dep-search-wrap">
+              <input
+                className="dep-search-input"
+                placeholder="🔍 Search application..."
+                value={appSearch}
+                onChange={e => setAppSearch(e.target.value)}
+                onFocus={() => setAppSearchOpen(true)}
+              />
+              {appSearchOpen && filteredApps.length > 0 && (
+                <div className="dep-search-dropdown">
+                  {filteredApps.map(app => (
+                    <div key={app} className="dep-search-item" onClick={() => { setSelectedApp(app); setAppSearch(''); setAppSearchOpen(false) }}>
+                      🔌 {app}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+          <div className="dep-apps-grid">
+            {uniqueApps.map(app => (
+              <div key={app} className="dep-app-card" onClick={() => setSelectedApp(app)}>
+                <div className="dep-app-icon">🔌</div>
+                <div className="dep-app-name">{app}</div>
+                <div className="dep-app-count">
+                  {getConnectionsForApp(app).length} connection{getConnectionsForApp(app).length !== 1 ? 's' : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )
+    }
 
-    const isExpanded = expandedFolders.has(folder.id)
-    const isMatching = folderSearch && folder.name.toLowerCase().includes(folderSearch.toLowerCase())
+    const appConnections = getConnectionsForApp(selectedApp)
 
     return (
-      <div key={folder.id}>
-
-        <div
-          className="connection-item"
-          style={{
-            paddingLeft: `${level * 18}px`,
-            cursor: "pointer",
-            backgroundColor: isMatching ? "#fffacd" : "transparent"
-          }}
-          onClick={() => {
-            toggleFolder(folder.id)
-
-            setSelectedNode({
-              type: "folder",
-              id: folder.id
-            })
-          }}
-        >
-          {isExpanded ? "▼" : "▶"} 📂 {folder.name}
+      <div className="dep-container">
+        <div className="dep-filters">
+          <button className="dep-back-btn" onClick={() => setSelectedApp(null)}>← Back</button>
+          <span className="dep-selected-app">🔌 {selectedApp}</span>
         </div>
 
-        {isExpanded && renderFolders(folder.id, level + 1)}
-
+        <div className="dep-graph">
+          <div className="dep-level">
+            <div className="dep-node dep-node-app">{selectedApp}</div>
+          </div>
+          <div className="dep-arrow">↓</div>
+          <div className="dep-level">
+            {appConnections.map(conn => {
+              const connRecipes = [...new Set(
+                recipeConnections.filter(rc => rc.connection_name === conn.name).map(rc => rc.recipe_name)
+              )]
+              return (
+                <div key={conn.name} className="dep-branch">
+                  <div className={`dep-node dep-node-conn ${conn.authorization_status === 'success' ? 'dep-conn-ok' : 'dep-conn-fail'}`}>
+                    <span className="dep-status-dot"></span>
+                    {conn.name}
+                  </div>
+                  {connRecipes.length > 0 && (
+                    <>
+                      <div className="dep-arrow">↓</div>
+                      <div className="dep-recipes">
+                        {connRecipes.map(rname => (
+                          <div key={rname} className="dep-node dep-node-recipe">📋 {rname}</div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        </div>
       </div>
     )
-  })
-}
+  }
 
   if (loading) {
     return (
@@ -287,286 +317,228 @@ const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
   }
 
   return (
-    
     <div className="dashboard">
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
-  <button onClick={fetchData} style={{
-    padding: "8px 16px",
-    cursor: "pointer",
-    backgroundColor: "#1976d2",
-    color: "white",
-    border: "none",
-    borderRadius: "4px"
-  }}>
-    🔄 Refresh
-  </button>
-
-  <div style={{ fontSize: "14px", color: "gray" }}>
-    {lastSynced ? `Last synced: ${lastSynced}` : "Not synced yet"}
-  </div>
-</div>
       <header className="header">
         <h1>Workato Observability & Performance Analytics</h1>
         <p>Track automation performance</p>
       </header>
 
-      <div className="filters">
+      {/* TABS */}
+      <div className="tabs-bar">
+        <button className={`tab-btn ${activeTab === 'dashboard' ? 'tab-active' : ''}`} onClick={() => setActiveTab('dashboard')}>
+          Dashboard
+        </button>
+        <button className={`tab-btn ${activeTab === 'dependency' ? 'tab-active' : ''}`} onClick={() => setActiveTab('dependency')}>
+          Dependency Graph
+        </button>
+        <div className="tab-actions">
+          <button onClick={fetchData} className="refresh-btn">🔄 Refresh</button>
+          <span className="last-synced">{lastSynced ? `Last synced: ${lastSynced}` : 'Not synced yet'}</span>
+        </div>
+      </div>
 
-  {/* PROJECT + FOLDER TREE */}
-  <div className="filter-group" style={{ minWidth: "260px", position: "relative" }} ref={folderDropdownRef}>
-    <label>Projects / Folders:</label>
+      {/* DASHBOARD TAB */}
+      {activeTab === 'dashboard' && (
+        <div>
+          <div className="filters">
 
-    {/* SEARCH BAR INSIDE */}
-    <input
-      type="text"
-      placeholder="Search project or folder..."
-      value={folderSearch}
-      onChange={(e) => setFolderSearch(e.target.value)}
-      onFocus={() => setIsFolderTreeExpanded(true)}
-      style={{ marginBottom: "8px" }}
-    />
-
-    {isFolderTreeExpanded && (
-      <div className="folder-tree-dropdown">
-        {folderSearch ? (
-          // SEARCH RESULTS - Show matching folders with hierarchy
-          (() => {
-            const matchingFolders = getMatchingFolders()
-            const projectsWithMatches = projectFolders.filter(p => 
-              matchingFolders.some(f => f.id === p.id || f.project_id === p.project_id)
-            )
-            
-            return projectsWithMatches.map(project => {
-              const isExpanded = expandedProjects.has(project.id)
-              const isMatching = project.name.toLowerCase().includes(folderSearch.toLowerCase())
-              
-              return (
-                <div key={project.id}>
-                  <div
-                    className="connection-item"
-                    style={{ 
-                      cursor: "pointer", 
-                      fontWeight: "bold",
-                      backgroundColor: isMatching ? "#fffacd" : "transparent"
-                    }}
-                    onClick={() => {
-                      toggleProject(project.id)
-                      setSelectedNode({
-                        type: "project",
-                        id: project.id
+            {/* PROJECT + FOLDER TREE */}
+            <div className="filter-group" style={{ minWidth: '260px', position: 'relative' }} ref={folderDropdownRef}>
+              <label>Projects / Folders:</label>
+              <input
+                type="text"
+                placeholder="Search project or folder..."
+                value={folderSearch}
+                onChange={e => setFolderSearch(e.target.value)}
+                onFocus={() => setIsFolderTreeExpanded(true)}
+              />
+              {isFolderTreeExpanded && (
+                <div className="folder-tree-dropdown">
+                  {folderSearch ? (
+                    (() => {
+                      const matchingFolders = getMatchingFolders()
+                      const projectsWithMatches = projectFolders.filter(p =>
+                        matchingFolders.some(f => f.id === p.id || f.project_id === p.project_id)
+                      )
+                      return projectsWithMatches.map(project => {
+                        const isExpanded = expandedProjects.has(project.id)
+                        const isMatching = project.name.toLowerCase().includes(folderSearch.toLowerCase())
+                        return (
+                          <div key={project.id}>
+                            <div
+                              className="connection-item"
+                              style={{ cursor: 'pointer', fontWeight: 'bold', backgroundColor: isMatching ? '#fffacd' : 'transparent' }}
+                              onClick={() => { toggleProject(project.id); setSelectedNode({ type: 'project', id: project.id }) }}
+                            >
+                              {isExpanded ? '▼' : '▶'} 📁 {project.name}
+                            </div>
+                            {isExpanded && renderFolders(project.id)}
+                          </div>
+                        )
                       })
-                    }}
-                  >
-                    {isExpanded ? "▼" : "▶"} 📁 {project.name}
-                  </div>
-                  {isExpanded && renderFolders(project.id)}
-                </div>
-              )
-            })
-          })()
-        ) : (
-          // NORMAL TREE VIEW
-          projectFolders.map(project => {
-            const isExpanded = expandedProjects.has(project.id)
-
-            return (
-              <div key={project.id}>
-
-                <div
-                  className="connection-item"
-                  style={{ cursor: "pointer", fontWeight: "bold" }}
-                  onClick={() => {
-                    toggleProject(project.id)
-                    setSelectedNode({
-                      type: "project",
-                      id: project.id
+                    })()
+                  ) : (
+                    projectFolders.map(project => {
+                      const isExpanded = expandedProjects.has(project.id)
+                      return (
+                        <div key={project.id}>
+                          <div
+                            className="connection-item"
+                            style={{ cursor: 'pointer', fontWeight: 'bold' }}
+                            onClick={() => { toggleProject(project.id); setSelectedNode({ type: 'project', id: project.id }) }}
+                          >
+                            {isExpanded ? '▼' : '▶'} 📁 {project.name}
+                          </div>
+                          {isExpanded && renderFolders(project.id)}
+                        </div>
+                      )
                     })
-                  }}
-                >
-                  {isExpanded ? "▼" : "▶"} 📁 {project.name}
+                  )}
                 </div>
+              )}
+              {!isFolderTreeExpanded && (
+                <div className="folder-tree-collapsed" onClick={() => setIsFolderTreeExpanded(true)}>
+                  {selectedNode ? folders.find(f => f.id === selectedNode.id)?.name || 'Select...' : 'Click to select...'}
+                </div>
+              )}
+            </div>
 
-                {isExpanded && renderFolders(project.id)}
+            {/* RECIPE FILTER */}
+            <div className="filter-group">
+              <label>Recipe:</label>
+              <select value={selectedRecipe} onChange={e => setSelectedRecipe(e.target.value)}>
+                <option value="all">All Recipes</option>
+                {filteredRecipesByNode.map(recipe => (
+                  <option key={recipe.id} value={String(recipe.id)}>{recipe.name}</option>
+                ))}
+              </select>
+            </div>
 
+            {/* START DATE */}
+            <div className="filter-group">
+              <label>Start Date:</label>
+              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
+            </div>
+
+            {/* END DATE */}
+            <div className="filter-group">
+              <label>End Date:</label>
+              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
+            </div>
+
+            <button className="reset-btn" onClick={() => {
+              setSelectedRecipe('all'); setSelectedNode(null)
+              setStartDate(''); setEndDate('')
+              setIsFolderTreeExpanded(false); setFolderSearch('')
+            }}>
+              Reset Filters
+            </button>
+          </div>
+
+          {/* STAT CARDS */}
+          <div className="stats-grid">
+            <div className="stat-card">
+              <div className="stat-content">
+                <h3>Connections</h3>
+                <div className="stat-number">{connectionStats.total}</div>
+                <div className="stat-detail">
+                  <span className="success">{connectionStats.active} Active</span>
+                  <span className="error">{connectionStats.failed} Failed</span>
+                </div>
               </div>
-            )
-          })
-        )}
-      </div>
-    )}
-
-    {/* COLLAPSED VIEW - Show selected item */}
-    {!isFolderTreeExpanded && (
-      <div 
-        className="folder-tree-collapsed"
-        onClick={() => setIsFolderTreeExpanded(true)}
-      >
-        {selectedNode ? (
-          folders.find(f => f.id === selectedNode.id)?.name || "Select..."
-        ) : (
-          "Click to select..."
-        )}
-      </div>
-    )}
-  </div>
-
-  {/* RECIPE FILTER */}
-  <div className="filter-group">
-    <label>Recipe:</label>
-
-    <select
-      value={selectedRecipe}
-      onChange={(e) => setSelectedRecipe(e.target.value)}
-    >
-
-      <option value="all">All Recipes</option>
-
-      {filteredRecipesByNode.map(recipe => (
-        <option key={recipe.id} value={String(recipe.id)}>
-          {recipe.name}
-        </option>
-      ))}
-
-    </select>
-  </div>
-
-  {/* START DATE */}
-  <div className="filter-group">
-    <label>Start Date:</label>
-    <input
-      type="date"
-      value={startDate}
-      onChange={(e) => setStartDate(e.target.value)}
-    />
-  </div>
-
-  {/* END DATE */}
-  <div className="filter-group">
-    <label>End Date:</label>
-    <input
-      type="date"
-      value={endDate}
-      onChange={(e) => setEndDate(e.target.value)}
-    />
-  </div>
-
-  {/* RESET */}
-  <button
-    className="reset-btn"
-    onClick={() => {
-      setSelectedRecipe("all")
-      setSelectedNode(null)
-      setStartDate("")
-      setEndDate("")
-      setIsFolderTreeExpanded(false)
-      setFolderSearch("")
-    }}
-  >
-    Reset Filters
-  </button>
-
-</div>
-
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-content">
-            <h3>Connections</h3>
-            <div className="stat-number">{connectionStats.total}</div>
-            <div className="stat-detail">
-              <span className="success">{connectionStats.active} Active</span>
-              <span className="error">{connectionStats.failed} Failed</span>
             </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-content">
-            <h3>Jobs</h3>
-            <div className="stat-number">{jobStats.total}</div>
-            <div className="stat-detail">
-              <span className="success">{jobStats.succeeded} Success</span>
-              <span className="error">{jobStats.failed} Failed</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-content">
-            <h3>Projects</h3>
-            <div className="stat-number">{projects.length}</div>
-            <div className="stat-detail">Active Projects</div>
-          </div>
-        </div>
-
-        <div className="stat-card">
-          <div className="stat-content">
-            <h3>Recipes</h3>
-            <div className="stat-number">{recipes.length}</div>
-            <div className="stat-detail">
-              <span className="success">{recipes.filter(r => r.running === true).length} Running</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div className="charts-grid">
-        <div className="chart-card">
-          <h3>Connections by Application</h3>
-          <div className="connections-menu">
-            {Object.entries(connectionByApp).map(([app, conns]) => (
-              <div key={app} className="app-group">
-                <div className="app-header" onClick={() => toggleApp(app)}>
-                  <span className="app-toggle">{expandedApps.has(app) ? '▼' : '▶'}</span>
-                  <span className="app-name">{app}</span>
-                  <span className="app-count">{conns.length}</span>
+            <div className="stat-card">
+              <div className="stat-content">
+                <h3>Jobs</h3>
+                <div className="stat-number">{jobStats.total}</div>
+                <div className="stat-detail">
+                  <span className="success">{jobStats.succeeded} Success</span>
+                  <span className="error">{jobStats.failed} Failed</span>
                 </div>
-                {expandedApps.has(app) && (
-                  <div className="connections-list">
-                    {conns.map((conn, idx) => (
-                      <div key={idx} className="connection-item">
-                        <span className="connection-name">{conn.name}</span>
-                        <span className={`connection-status ${conn.authorization_status === 'success' ? 'status-success' : 'status-failed'}`}>
-                          {conn.authorization_status === 'success' ? '✓' : '✗'}
-                        </span>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-content">
+                <h3>Projects</h3>
+                <div className="stat-number">{projects.length}</div>
+                <div className="stat-detail">Active Projects</div>
+              </div>
+            </div>
+            <div className="stat-card">
+              <div className="stat-content">
+                <h3>Recipes</h3>
+                <div className="stat-number">{recipes.length}</div>
+                <div className="stat-detail">
+                  <span className="success">{recipes.filter(r => r.running === true).length} Running</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* CHARTS */}
+          <div className="charts-grid">
+            <div className="chart-card">
+              <h3>Connections by Application</h3>
+              <div className="connections-menu">
+                {Object.entries(connectionByApp).map(([app, conns]) => (
+                  <div key={app} className="app-group">
+                    <div className="app-header" onClick={() => toggleApp(app)}>
+                      <span className="app-toggle">{expandedApps.has(app) ? '▼' : '▶'}</span>
+                      <span className="app-name">{app}</span>
+                      <span className="app-count">{conns.length}</span>
+                    </div>
+                    {expandedApps.has(app) && (
+                      <div className="connections-list">
+                        {conns.map((conn, idx) => (
+                          <div key={idx} className="connection-item">
+                            <span className="connection-name">{conn.name}</span>
+                            <span className={`connection-status ${conn.authorization_status === 'success' ? 'status-success' : 'status-failed'}`}>
+                              {conn.authorization_status === 'success' ? '✓' : '✗'}
+                            </span>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    )}
                   </div>
-                )}
+                ))}
               </div>
-            ))}
+            </div>
+
+            <div className="chart-card">
+              <h3>Job Status Overview</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={dailyJobData}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="succeeded" stackId="a" fill="#43e97b" name="Succeeded" />
+                  <Bar dataKey="failed" stackId="a" fill="#fa709a" name="Failed" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+
+            <div className="chart-card full-width">
+              <h3>Top 5 Recipes Performance</h3>
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={recipeStats}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="name" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Bar dataKey="succeeded" fill="#43e97b" name="Succeeded" />
+                  <Bar dataKey="failed" fill="#fa709a" name="Failed" />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
+      )}
 
-        <div className="chart-card">
-          <h3>Job Status Overview</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={dailyJobData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="date" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="succeeded" stackId="a" fill="#43e97b" name="Succeeded" />
-              <Bar dataKey="failed" stackId="a" fill="#fa709a" name="Failed" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="chart-card full-width">
-          <h3>Top 5 Recipes Performance</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={recipeStats}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="name" />
-              <YAxis />
-              <Tooltip />
-              <Legend />
-              <Bar dataKey="succeeded" fill="#43e97b" name="Succeeded" />
-              <Bar dataKey="failed" fill="#fa709a" name="Failed" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
+      {/* DEPENDENCY GRAPH TAB */}
+      {activeTab === 'dependency' && renderDependencyGraph()}
     </div>
   )
 }
