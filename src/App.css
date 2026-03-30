@@ -934,3 +934,21 @@ tbody tr:hover {
 }
 
 .audit-chevron:hover { color: #11998e; }
+
+/* ── Fetch error banner ───────────────────────────────────── */
+.fetch-error {
+  background: #fff0f0;
+  border: 2px solid #fa709a;
+  border-radius: 10px;
+  padding: 0.85rem 1.2rem;
+  margin-bottom: 1.2rem;
+  color: #8b1a3a;
+  font-size: 0.9rem;
+}
+
+.fetch-error code {
+  background: #ffe0ea;
+  padding: 0.1rem 0.4rem;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}

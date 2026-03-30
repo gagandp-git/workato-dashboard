@@ -91,30 +91,47 @@ function App() {
   const [selectedApp, setSelectedApp] = useState<string | null>(null)
   const [appSearch, setAppSearch] = useState('')
   const [appSearchOpen, setAppSearchOpen] = useState(false)
+  const [fetchError, setFetchError] = useState<string | null>(null)
   const folderDropdownRef = useRef<HTMLDivElement>(null)
   const appSearchRef = useRef<HTMLDivElement>(null)
 
   const fetchData = async () => {
     try {
       setLoading(true)
-      const [projectsRes, connectionsRes, jobsRes, recipesRes, foldersRes, rcRes] = await Promise.all([
-        fetch(`${BASE_URL}/api/projects`),
-        fetch(`${BASE_URL}/api/connections`),
-        fetch(`${BASE_URL}/api/jobs`),
-        fetch(`${BASE_URL}/api/recipes`),
-        fetch(`${BASE_URL}/api/folders`),
-        fetch(`${BASE_URL}/api/recipe_connections`)
+      setFetchError(null)
+
+      const safeJson = async (url: string) => {
+        try {
+          const res = await fetch(url)
+          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+          return await res.json()
+        } catch (e) {
+          console.error(`Failed to fetch ${url}:`, e)
+          return []
+        }
+      }
+
+      const [proj, conns, jobsData, recs, fols, rcs, audit] = await Promise.all([
+        safeJson(`${BASE_URL}/api/projects`),
+        safeJson(`${BASE_URL}/api/connections`),
+        safeJson(`${BASE_URL}/api/jobs`),
+        safeJson(`${BASE_URL}/api/recipes`),
+        safeJson(`${BASE_URL}/api/folders`),
+        safeJson(`${BASE_URL}/api/recipe_connections`),
+        safeJson(`${BASE_URL}/api/audit_logs`),
       ])
-      setProjects(await projectsRes.json())
-      setConnections(await connectionsRes.json())
-      setJobs(await jobsRes.json())
-      setRecipes(await recipesRes.json())
-      setFolders(await foldersRes.json())
-      setRecipeConnections(await rcRes.json())
-      try { const ar = await fetch(`${BASE_URL}/api/audit_logs`); setAuditLogs(await ar.json()) } catch { setAuditLogs([]) }
+
+      setProjects(Array.isArray(proj) ? proj : [])
+      setConnections(Array.isArray(conns) ? conns : [])
+      setJobs(Array.isArray(jobsData) ? jobsData : [])
+      setRecipes(Array.isArray(recs) ? recs : [])
+      setFolders(Array.isArray(fols) ? fols : [])
+      setRecipeConnections(Array.isArray(rcs) ? rcs : [])
+      setAuditLogs(Array.isArray(audit) ? audit : [])
       setLastSynced(new Date().toLocaleString())
     } catch (error) {
       console.error('Error fetching data:', error)
+      setFetchError(String(error))
     } finally {
       setLoading(false)
     }
@@ -408,6 +425,13 @@ function App() {
           <span className="last-synced">{lastSynced ? `Last synced: ${lastSynced}` : 'Not synced yet'}</span>
         </div>
       </div>
+
+      {/* ERROR BANNER */}
+      {fetchError && (
+        <div className="fetch-error">
+          ⚠️ Could not reach backend: <strong>{fetchError}</strong> — check that <code>{BASE_URL}</code> is correct and the server is running.
+        </div>
+      )}
 
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (
