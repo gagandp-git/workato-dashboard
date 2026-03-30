@@ -3,6 +3,20 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, Responsive
 import './App.css'
 const BASE_URL = import.meta.env.VITE_API_URL as string;
 
+interface AuditLog {
+  id: number
+  timestamp: string
+  event_type: string
+  workspace_name: string
+  workspace_environment: string
+  user_name: string
+  user_email: string
+  resource_name: string
+  resource_type: string
+  resource_path: string
+  details: Record<string, unknown>
+}
+
 interface RecipeConnection {
   recipe_id: number
   recipe_name: string
@@ -58,7 +72,11 @@ function App() {
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
   const [recipeConnections, setRecipeConnections] = useState<RecipeConnection[]>([])
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'dependency'>('dashboard')
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
+  const [auditUserFilter, setAuditUserFilter] = useState('all')
+  const [auditEventFilter, setAuditEventFilter] = useState('all')
+  const [auditExpanded, setAuditExpanded] = useState<Set<number>>(new Set())
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'dependency' | 'audit'>('dashboard')
   const [loading, setLoading] = useState(true)
   const [selectedRecipe, setSelectedRecipe] = useState<string>('all')
   const [startDate, setStartDate] = useState<string>('')
@@ -93,6 +111,7 @@ function App() {
       setRecipes(await recipesRes.json())
       setFolders(await foldersRes.json())
       setRecipeConnections(await rcRes.json())
+      try { const ar = await fetch(`${BASE_URL}/api/audit_logs`); setAuditLogs(await ar.json()) } catch { setAuditLogs([]) }
       setLastSynced(new Date().toLocaleString())
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -381,6 +400,9 @@ function App() {
         <button className={`tab-btn ${activeTab === 'dependency' ? 'tab-active' : ''}`} onClick={() => setActiveTab('dependency')}>
           Dependency Graph
         </button>
+        <button className={`tab-btn ${activeTab === 'audit' ? 'tab-active' : ''}`} onClick={() => setActiveTab('audit')}>
+          Audit Logs
+        </button>
         <div className="tab-actions">
           <button onClick={fetchData} className="refresh-btn">🔄 Refresh</button>
           <span className="last-synced">{lastSynced ? `Last synced: ${lastSynced}` : 'Not synced yet'}</span>
@@ -589,6 +611,150 @@ function App() {
 
       {/* DEPENDENCY GRAPH TAB */}
       {activeTab === 'dependency' && renderDependencyGraph()}
+
+      {/* AUDIT LOGS TAB */}
+      {activeTab === 'audit' && (() => {
+        const eventMeta: Record<string, { icon: string; color: string; label: string }> = {
+          recipe_started:   { icon: '▶️', color: '#22c55e', label: 'started' },
+          recipe_stopped:   { icon: '⏹️', color: '#f97316', label: 'stopped' },
+          recipe_created:   { icon: '✨', color: '#6366f1', label: 'created' },
+          recipe_updated:   { icon: '✏️', color: '#3b82f6', label: 'edited' },
+          recipe_deleted:   { icon: '🗑️', color: '#ef4444', label: 'deleted' },
+          recipe_moved:     { icon: '📦', color: '#8b5cf6', label: 'moved' },
+          user_login:       { icon: '👤', color: '#11998e', label: 'login' },
+          api_privilege_group_updated: { icon: '🔐', color: '#f59e0b', label: 'updated' },
+        }
+        const getMeta = (et: string) => eventMeta[et] || { icon: '🔔', color: '#888', label: et.replace(/_/g, ' ') }
+
+        const uniqueUsers = ['all', ...Array.from(new Set(auditLogs.map(l => l.user_name).filter(Boolean)))]
+        const uniqueEvents = ['all', ...Array.from(new Set(auditLogs.map(l => l.event_type).filter(Boolean)))]
+
+        const filtered = auditLogs
+          .filter(l => auditUserFilter === 'all' || l.user_name === auditUserFilter)
+          .filter(l => auditEventFilter === 'all' || l.event_type === auditEventFilter)
+          .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+
+        // group by date label
+        const groups: Record<string, AuditLog[]> = {}
+        filtered.forEach(log => {
+          const d = new Date(log.timestamp)
+          const today = new Date()
+          const yesterday = new Date(); yesterday.setDate(today.getDate() - 1)
+          let label = d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })
+          if (d.toDateString() === today.toDateString()) label = 'Today'
+          else if (d.toDateString() === yesterday.toDateString()) label = 'Yesterday'
+          if (!groups[label]) groups[label] = []
+          groups[label].push(log)
+        })
+
+        const formatTime = (ts: string) => {
+          const d = new Date(ts)
+          const now = new Date()
+          const diffMin = Math.round((now.getTime() - d.getTime()) / 60000)
+          if (diffMin < 60) return `${diffMin} minute${diffMin !== 1 ? 's' : ''} ago`
+          return `at ${d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}`
+        }
+
+        const buildSummary = (log: AuditLog) => {
+          const m = getMeta(log.event_type)
+          const rname = log.resource_name || ''
+          const rpath = log.resource_path || ''
+          const pathParts = rpath.split('/').filter(Boolean).slice(1) // strip 'Home'
+          if (log.event_type === 'user_login') return <span>User login.</span>
+          if (log.event_type === 'api_privilege_group_updated')
+            return <span>Developer API client role <strong>{rname}</strong> was updated.</span>
+          return (
+            <span>
+              Recipe <strong className="audit-link">{rname}</strong>
+              {pathParts.length > 0 && <> in <strong className="audit-link">{pathParts.join('/')}</strong></>}
+              {' '}was {m.label}.
+            </span>
+          )
+        }
+
+        const buildDetails = (log: AuditLog) => {
+          const d = log.details as Record<string, unknown>
+          const rows: { k: string; v: string }[] = []
+          if (d?.error !== undefined) rows.push({ k: 'Error', v: String(d.error) })
+          if (d?.stop_reason) rows.push({ k: 'Stop reason', v: String(d.stop_reason) })
+          if (d?.activity) rows.push({ k: 'Activity', v: String(d.activity) })
+          if (d?.run_once !== undefined) rows.push({ k: 'Run once', v: String(d.run_once) })
+          const req = d?.request as Record<string, unknown> | undefined
+          if (req?.ip_address) rows.push({ k: 'IP address', v: String(req.ip_address) })
+          return rows
+        }
+
+        return (
+          <div className="audit-container">
+            {/* filters */}
+            <div className="audit-filters">
+              <select className="audit-select" value={auditUserFilter} onChange={e => setAuditUserFilter(e.target.value)}>
+                {uniqueUsers.map(u => <option key={u} value={u}>{u === 'all' ? 'All collaborators' : u}</option>)}
+              </select>
+              <select className="audit-select" value={auditEventFilter} onChange={e => setAuditEventFilter(e.target.value)}>
+                {uniqueEvents.map(e => <option key={e} value={e}>{e === 'all' ? 'All event types' : e.replace(/_/g, ' ')}</option>)}
+              </select>
+              <span className="audit-count">{filtered.length} events</span>
+            </div>
+
+            {filtered.length === 0 && (
+              <div className="audit-empty">No audit logs found. Sync data from Workato to populate.</div>
+            )}
+
+            {Object.entries(groups).map(([dateLabel, logs]) => (
+              <div key={dateLabel} className="audit-group">
+                <div className="audit-date-header">{dateLabel}</div>
+                <div className="audit-timeline">
+                  {logs.map((log, idx) => {
+                    const m = getMeta(log.event_type)
+                    const isExp = auditExpanded.has(log.id)
+                    const details = buildDetails(log)
+                    return (
+                      <div key={`${log.id}-${idx}`} className="audit-row">
+                        <div className="audit-icon-col">
+                          <div className="audit-icon" style={{ background: m.color + '22', border: `2px solid ${m.color}` }}>
+                            <span>{m.icon}</span>
+                          </div>
+                          <div className="audit-vline"></div>
+                        </div>
+                        <div className="audit-content">
+                          <div className="audit-summary">{buildSummary(log)}</div>
+                          <div className="audit-meta">
+                            <span className="audit-user">{log.user_name}</span>
+                            <span className="audit-sep">|</span>
+                            <span className="audit-time">{formatTime(log.timestamp)}</span>
+                            {log.workspace_environment && (
+                              <span className="audit-env">{log.workspace_environment}</span>
+                            )}
+                          </div>
+                          {details.length > 0 && (
+                            <button className="audit-expand-btn" onClick={() => setAuditExpanded(prev => {
+                              const n = new Set(prev); n.has(log.id) ? n.delete(log.id) : n.add(log.id); return n
+                            })}>{isExp ? '▲ Hide' : '▼ Details'}</button>
+                          )}
+                          {isExp && details.length > 0 && (
+                            <div className="audit-details">
+                              {details.map(r => (
+                                <div key={r.k} className="audit-detail-row">
+                                  <span className="audit-detail-key">{r.k}</span>
+                                  <span className="audit-detail-val">{r.v}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                        <div className="audit-chevron" onClick={() => setAuditExpanded(prev => {
+                          const n = new Set(prev); n.has(log.id) ? n.delete(log.id) : n.add(log.id); return n
+                        })}>{isExp ? '▲' : '▼'}</div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        )
+      })()}
     </div>
   )
 }
