@@ -241,16 +241,25 @@ function App() {
     return folders.filter(f => f.parent_id === parentId).map(folder => {
       const isExpanded = expandedFolders.has(folder.id)
       const isMatching = !!(folderSearch && folder.name.toLowerCase().includes(folderSearch.toLowerCase()))
+      // auto-expand if a child matches
+      const hasMatchingChild = !!(folderSearch && folders.some(f => {
+        let cur: typeof f | undefined = f
+        while (cur) {
+          if (cur.id === folder.id) return f.name.toLowerCase().includes(folderSearch.toLowerCase())
+          cur = folders.find(p => p.id === cur!.parent_id)
+        }
+        return false
+      }))
       return (
         <div key={folder.id}>
           <div
             className="connection-item"
-            style={{ paddingLeft: `${level * 18}px`, cursor: 'pointer', backgroundColor: isMatching ? '#fffacd' : 'transparent' }}
+            style={{ paddingLeft: `${level * 18}px`, cursor: 'pointer', backgroundColor: isMatching ? '#e6fff8' : 'transparent', fontWeight: isMatching ? '700' : 'normal' }}
             onClick={() => { toggleFolder(folder.id); setSelectedNode({ type: 'folder', id: folder.id }) }}
           >
-            {isExpanded ? '▼' : '▶'} 📂 {folder.name}
+            {(isExpanded || hasMatchingChild) ? '▼' : '▶'} 📂 {folder.name}
           </div>
-          {isExpanded && renderFolders(folder.id, level + 1)}
+          {(isExpanded || hasMatchingChild) && renderFolders(folder.id, level + 1)}
         </div>
       )
     })
@@ -285,13 +294,16 @@ function App() {
               )}
               {appSearchOpen && filteredApps.length > 0 && (
                 <div className="dep-search-dropdown">
-                  {filteredApps.map(app => (
+                  {filteredApps.slice(0, 8).map(app => (
                     <div key={app} className="dep-search-item" onClick={() => { setSelectedApp(app); setAppSearch(''); setAppSearchOpen(false) }}>
                       <span className="dep-search-item-icon">🔌</span>
                       <span className="dep-search-item-name">{app}</span>
                       <span className="dep-search-item-count">{getConnectionsForApp(app).length} conn</span>
                     </div>
                   ))}
+                  {filteredApps.length > 8 && (
+                    <div className="dep-search-more">+{filteredApps.length - 8} more — keep typing to narrow</div>
+                  )}
                 </div>
               )}
             </div>
@@ -445,25 +457,22 @@ function App() {
                 type="text"
                 placeholder="Search project or folder..."
                 value={folderSearch}
-                onChange={e => setFolderSearch(e.target.value)}
+                onChange={e => { setFolderSearch(e.target.value); setIsFolderTreeExpanded(true) }}
                 onFocus={() => setIsFolderTreeExpanded(true)}
               />
               {isFolderTreeExpanded && (
                 <div className="folder-tree-dropdown">
-                  {folderSearch ? (
-                    (() => {
-                      const matchingFolders = getMatchingFolders()
-                      const projectsWithMatches = projectFolders.filter(p =>
-                        matchingFolders.some(f => f.id === p.id || f.project_id === p.project_id)
-                      )
-                      return projectsWithMatches.map(project => {
+                  {(() => {
+                    // build list: matching folders first (with parent chain), then rest
+                    const searchLower = folderSearch.toLowerCase()
+                    if (!folderSearch) {
+                      return projectFolders.map(project => {
                         const isExpanded = expandedProjects.has(project.id)
-                        const isMatching = project.name.toLowerCase().includes(folderSearch.toLowerCase())
                         return (
                           <div key={project.id}>
                             <div
                               className="connection-item"
-                              style={{ cursor: 'pointer', fontWeight: 'bold', backgroundColor: isMatching ? '#fffacd' : 'transparent' }}
+                              style={{ cursor: 'pointer', fontWeight: 'bold' }}
                               onClick={() => { toggleProject(project.id); setSelectedNode({ type: 'project', id: project.id }) }}
                             >
                               {isExpanded ? '▼' : '▶'} 📁 {project.name}
@@ -472,15 +481,32 @@ function App() {
                           </div>
                         )
                       })
-                    })()
-                  ) : (
-                    projectFolders.map(project => {
-                      const isExpanded = expandedProjects.has(project.id)
+                    }
+                    // matching folders
+                    const matchingFolders = folders.filter(f => f.name.toLowerCase().includes(searchLower))
+                    // collect their parent project ids
+                    const matchingProjectIds = new Set<number>()
+                    matchingFolders.forEach(f => {
+                      // walk up to find root project
+                      let cur: typeof f | undefined = f
+                      while (cur) {
+                        if (cur.is_project) { matchingProjectIds.add(cur.id); break }
+                        cur = folders.find(p => p.id === cur!.parent_id)
+                      }
+                    })
+                    // projects that have matches come first
+                    const sortedProjects = [
+                      ...projectFolders.filter(p => matchingProjectIds.has(p.id)),
+                      ...projectFolders.filter(p => !matchingProjectIds.has(p.id))
+                    ]
+                    return sortedProjects.map(project => {
+                      const isExpanded = expandedProjects.has(project.id) || matchingProjectIds.has(project.id)
+                      const isMatching = project.name.toLowerCase().includes(searchLower)
                       return (
                         <div key={project.id}>
                           <div
                             className="connection-item"
-                            style={{ cursor: 'pointer', fontWeight: 'bold' }}
+                            style={{ cursor: 'pointer', fontWeight: 'bold', backgroundColor: isMatching ? '#e6fff8' : 'transparent' }}
                             onClick={() => { toggleProject(project.id); setSelectedNode({ type: 'project', id: project.id }) }}
                           >
                             {isExpanded ? '▼' : '▶'} 📁 {project.name}
@@ -489,12 +515,7 @@ function App() {
                         </div>
                       )
                     })
-                  )}
-                </div>
-              )}
-              {!isFolderTreeExpanded && (
-                <div className="folder-tree-collapsed" onClick={() => setIsFolderTreeExpanded(true)}>
-                  {selectedNode ? folders.find(f => f.id === selectedNode.id)?.name || 'Select...' : 'Click to select...'}
+                  })()}
                 </div>
               )}
             </div>

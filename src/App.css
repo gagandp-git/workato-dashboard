@@ -50,6 +50,14 @@
   text-overflow: ellipsis;
 }
 
+.dep-search-more {
+  padding: 0.5rem 1rem;
+  font-size: 0.78rem;
+  color: #aaa;
+  border-top: 1px solid #f0f0f0;
+  font-style: italic;
+}
+
 .folder-tree-dropdown {
   position: absolute;
   top: 100%;
@@ -58,6 +66,7 @@
   max-height: 300px;
   overflow-y: auto;
   overflow-x: hidden;
+  overscroll-behavior: contain;
   background: white;
   border: 2px solid #11998e;
   border-radius: 8px;
@@ -494,7 +503,9 @@ tbody tr:hover {
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(0,0,0,0.12);
   z-index: 200;
-  overflow: hidden;
+  overflow-y: auto;
+  max-height: 320px;
+  overscroll-behavior: contain;
 }
 
 .dep-search-item {
