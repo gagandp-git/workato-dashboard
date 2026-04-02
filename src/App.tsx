@@ -115,6 +115,8 @@ function App() {
     }
   }
 
+  useEffect(() => { fetchData() }, [])
+
   useEffect(() => {
     const fetchJobStats = async () => {
       try {
