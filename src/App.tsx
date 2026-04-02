@@ -76,6 +76,7 @@ function App() {
   const [auditUserFilter, setAuditUserFilter] = useState('all')
   const [auditEventFilter, setAuditEventFilter] = useState('all')
   const [auditExpanded, setAuditExpanded] = useState<Set<number>>(new Set())
+  const [dailyJobData, setDailyJobData] = useState<{date: string; succeeded: number; failed: number}[]>([])
   const [activeTab, setActiveTab] = useState<'dashboard' | 'dependency' | 'audit'>('dashboard')
   const [loading, setLoading] = useState(true)
   const [selectedRecipe, setSelectedRecipe] = useState<string>('all')
@@ -111,23 +112,16 @@ function App() {
         }
       }
 
-      const [proj, conns, jobsData, recs, fols, rcs, audit] = await Promise.all([
-        safeJson(`${BASE_URL}/api/projects`),
-        safeJson(`${BASE_URL}/api/connections`),
-        safeJson(`${BASE_URL}/api/jobs`),
-        safeJson(`${BASE_URL}/api/recipes`),
-        safeJson(`${BASE_URL}/api/folders`),
-        safeJson(`${BASE_URL}/api/recipe_connections`),
-        safeJson(`${BASE_URL}/api/audit_logs`),
-      ])
-
-      setProjects(Array.isArray(proj) ? proj : [])
-      setConnections(Array.isArray(conns) ? conns : [])
-      setJobs(Array.isArray(jobsData) ? jobsData : [])
-      setRecipes(Array.isArray(recs) ? recs : [])
-      setFolders(Array.isArray(fols) ? fols : [])
-      setRecipeConnections(Array.isArray(rcs) ? rcs : [])
-      setAuditLogs(Array.isArray(audit) ? audit : [])
+      const data = await safeJson(`${BASE_URL}/api/dashboard`);
+      setProjects(data.projects || []);
+      setConnections(data.connections || []);
+      setJobs(data.jobs || []);
+      setRecipes(data.recipes || []);
+      setFolders(data.folders || []);
+      setRecipeConnections(data.recipeConnections || []);
+      setAuditLogs(data.auditLogs || []);
+      const stats = await safeJson(`${BASE_URL}/api/job-stats`);
+      setDailyJobData(Array.isArray(stats) ? stats : []);
       setLastSynced(new Date().toLocaleString())
     } catch (error) {
       console.error('Error fetching data:', error)
@@ -159,20 +153,6 @@ function App() {
     failed: connections.filter(c => c.authorization_status !== 'success' && c.authorization_status).length
   }
 
-  const filteredJobs = jobs.filter(job => {
-    let match = true
-    if (selectedRecipe !== 'all' && job.recipe_id !== selectedRecipe) match = false
-    if (startDate && job.completed_at && new Date(job.completed_at) < new Date(startDate)) match = false
-    if (endDate && job.completed_at && new Date(job.completed_at) > new Date(endDate)) match = false
-    return match
-  })
-
-  const jobStats = {
-    total: filteredJobs.length,
-    succeeded: filteredJobs.filter(j => j.status === 'succeeded').length,
-    failed: filteredJobs.filter(j => j.status === 'failed').length
-  }
-
   const filteredRecipesByNode = recipes.filter(r => {
     if (!selectedNode) return true
     if (selectedNode.type === 'project') return r.project_id === selectedNode.id
@@ -184,6 +164,23 @@ function App() {
     }
     return true
   })
+
+  const filteredJobs = jobs.filter(job => {
+    if (selectedNode) {
+      const scopeIds = new Set(filteredRecipesByNode.map(r => String(r.id)))
+      if (!scopeIds.has(job.recipe_id)) return false
+    }
+    if (selectedRecipe !== 'all' && job.recipe_id !== selectedRecipe) return false
+    if (startDate && job.completed_at && new Date(job.completed_at) < new Date(startDate)) return false
+    if (endDate && job.completed_at && new Date(job.completed_at) > new Date(endDate)) return false
+    return true
+  })
+
+  const jobStats = {
+    total: filteredJobs.length,
+    succeeded: filteredJobs.filter(j => j.status === 'succeeded').length,
+    failed: filteredJobs.filter(j => j.status === 'failed').length
+  }
 
   const connectionByApp = connections.reduce((acc, conn) => {
     if (!acc[conn.application]) acc[conn.application] = []
@@ -203,23 +200,14 @@ function App() {
 
   const projectFolders = folders.filter(f => f.is_project)
 
-  const recipeStats = filteredRecipesByNode.map(r => ({
-    name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
-    succeeded: r.job_succeeded_count || 0,
-    failed: r.job_failed_count || 0
-  })).slice(0, 5)
-
-  const jobsByDate = filteredJobs.reduce((acc, job) => {
-    if (job.completed_at) {
-      const date = new Date(job.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-      if (!acc[date]) acc[date] = { date, succeeded: 0, failed: 0 }
-      if (job.status === 'succeeded') acc[date].succeeded++
-      else if (job.status === 'failed') acc[date].failed++
-    }
-    return acc
-  }, {} as Record<string, { date: string; succeeded: number; failed: number }>)
-
-  const dailyJobData = Object.values(jobsByDate).slice(-7)
+  const recipeStats = [...filteredRecipesByNode]
+    .sort((a, b) => (b.job_succeeded_count + b.job_failed_count) - (a.job_succeeded_count + a.job_failed_count))
+    .slice(0, 5)
+    .map(r => ({
+      name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
+      succeeded: r.job_succeeded_count || 0,
+      failed: r.job_failed_count || 0
+    }))
 
   const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
     return folders.filter(f => f.parent_id === parentId).map(folder => {
@@ -278,16 +266,13 @@ function App() {
               )}
               {appSearchOpen && filteredApps.length > 0 && (
                 <div className="dep-search-dropdown">
-                  {filteredApps.slice(0, 8).map(app => (
+                  {filteredApps.map(app => (
                     <div key={app} className="dep-search-item" onClick={() => { setSelectedApp(app); setAppSearch(''); setAppSearchOpen(false) }}>
                       <span className="dep-search-item-icon">🔌</span>
                       <span className="dep-search-item-name">{app}</span>
                       <span className="dep-search-item-count">{getConnectionsForApp(app).length} conn</span>
                     </div>
                   ))}
-                  {filteredApps.length > 8 && (
-                    <div className="dep-search-more">+{filteredApps.length - 8} more — keep typing to narrow</div>
-                  )}
                 </div>
               )}
             </div>
