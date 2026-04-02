@@ -203,22 +203,6 @@ function App() {
 
   const projectFolders = folders.filter(f => f.is_project)
 
-  const getMatchingFolders = () => {
-    if (!folderSearch) return []
-    const searchLower = folderSearch.toLowerCase()
-    const matchingFolders = folders.filter(f => f.name.toLowerCase().includes(searchLower))
-    const parentIds = new Set<number>()
-    matchingFolders.forEach(folder => {
-      let cur = folder
-      while (cur.parent_id) {
-        parentIds.add(cur.parent_id)
-        cur = folders.find(f => f.id === cur.parent_id)!
-        if (!cur) break
-      }
-    })
-    return folders.filter(f => matchingFolders.includes(f) || parentIds.has(f.id))
-  }
-
   const recipeStats = filteredRecipesByNode.map(r => ({
     name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
     succeeded: r.job_succeeded_count || 0,
