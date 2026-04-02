@@ -1136,3 +1136,39 @@ tbody tr:hover {
     max-height: none;
   }
 }
+
+/* ── Audit pagination ─────────────────────────────────────── */
+.audit-pagination {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.audit-page-btn {
+  padding: 0.3rem 0.8rem;
+  border: 1.5px solid #11998e;
+  background: white;
+  color: #11998e;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s;
+}
+
+.audit-page-btn:hover:not(:disabled) {
+  background: #11998e;
+  color: white;
+}
+
+.audit-page-btn:disabled {
+  border-color: #ddd;
+  color: #bbb;
+  cursor: not-allowed;
+}
+
+.audit-page-info {
+  font-size: 0.8rem;
+  color: #666;
+}

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import './App.css'
 const BASE_URL = import.meta.env.VITE_API_URL as string;
@@ -73,6 +73,9 @@ function App() {
   const [expandedFolders, setExpandedFolders] = useState<Set<number>>(new Set())
   const [expandedProjects, setExpandedProjects] = useState<Set<number>>(new Set())
   const [folderSearch, setFolderSearch] = useState('')
+  const [debouncedFolderSearch, setDebouncedFolderSearch] = useState('')
+  const [auditPage, setAuditPage] = useState(0)
+  const AUDIT_LIMIT = 100
   const [isFolderTreeExpanded, setIsFolderTreeExpanded] = useState(false)
   const [selectedApp, setSelectedApp] = useState<string | null>(null)
   const [appSearch, setAppSearch] = useState('')
@@ -97,7 +100,7 @@ function App() {
         }
       }
 
-      const data = await safeJson(`${BASE_URL}/api/dashboard`);
+      const data = await safeJson(`${BASE_URL}/api/dashboard?auditLimit=${AUDIT_LIMIT}&auditOffset=${auditPage * AUDIT_LIMIT}`);
       setConnections(data.connections || []);
       setRecipes(data.recipes || []);
       setFolders(data.folders || []);
@@ -116,6 +119,11 @@ function App() {
   }
 
   useEffect(() => { fetchData() }, [])
+
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedFolderSearch(folderSearch), 300)
+    return () => clearTimeout(t)
+  }, [folderSearch])
 
   useEffect(() => {
     const fetchJobStats = async () => {
@@ -148,13 +156,13 @@ function App() {
   }, [])
 
   // ── Dashboard logic ──────────────────────────────────────────
-  const connectionStats = {
+  const connectionStats = useMemo(() => ({
     total: connections.length,
     active: connections.filter(c => c.authorization_status === 'success').length,
     failed: connections.filter(c => c.authorization_status !== 'success' && c.authorization_status).length
-  }
+  }), [connections])
 
-  const filteredRecipesByNode = recipes.filter(r => {
+  const filteredRecipesByNode = useMemo(() => recipes.filter(r => {
     if (!selectedNode) return true
     if (selectedNode.type === 'project') return r.project_id === selectedNode.id
     if (selectedNode.type === 'folder') {
@@ -164,13 +172,30 @@ function App() {
       return r.folder_id === selectedNode.id
     }
     return true
-  })
+  }), [recipes, selectedNode, folders])
 
-  const connectionByApp = connections.reduce((acc, conn) => {
+  const connectionByApp = useMemo(() => connections.reduce((acc, conn) => {
     if (!acc[conn.application]) acc[conn.application] = []
     acc[conn.application].push(conn)
     return acc
-  }, {} as Record<string, Connection[]>)
+  }, {} as Record<string, Connection[]>), [connections])
+
+  const recipeStats = useMemo(() => [...filteredRecipesByNode]
+    .sort((a, b) => (b.job_succeeded_count + b.job_failed_count) - (a.job_succeeded_count + a.job_failed_count))
+    .slice(0, 5)
+    .map(r => ({
+      name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
+      succeeded: r.job_succeeded_count || 0,
+      failed: r.job_failed_count || 0
+    })), [filteredRecipesByNode])
+
+  const uniqueApps = useMemo(() =>
+    [...new Set(recipeConnections.map(rc => rc.application).filter(Boolean))]
+  , [recipeConnections])
+
+  const filteredApps = useMemo(() =>
+    uniqueApps.filter(app => app.toLowerCase().includes(appSearch.toLowerCase()))
+  , [uniqueApps, appSearch])
 
   const toggleApp = (app: string) => setExpandedApps(prev => {
     const next = new Set(prev); next.has(app) ? next.delete(app) : next.add(app); return next
@@ -182,28 +207,18 @@ function App() {
     const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next
   })
 
-  const projectFolders = folders.filter(f => f.is_project)
+  const projectFolders = useMemo(() => folders.filter(f => f.is_project), [folders])
 
   const chartJobData = dailyJobData
-
-  const recipeStats = [...filteredRecipesByNode]
-    .sort((a, b) => (b.job_succeeded_count + b.job_failed_count) - (a.job_succeeded_count + a.job_failed_count))
-    .slice(0, 5)
-    .map(r => ({
-      name: r.name.length > 20 ? r.name.substring(0, 20) + '...' : r.name,
-      succeeded: r.job_succeeded_count || 0,
-      failed: r.job_failed_count || 0
-    }))
 
   const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
     return folders.filter(f => f.parent_id === parentId).map(folder => {
       const isExpanded = expandedFolders.has(folder.id)
-      const isMatching = !!(folderSearch && folder.name.toLowerCase().includes(folderSearch.toLowerCase()))
-      // auto-expand if a child matches
-      const hasMatchingChild = !!(folderSearch && folders.some(f => {
+      const isMatching = !!(debouncedFolderSearch && folder.name.toLowerCase().includes(debouncedFolderSearch.toLowerCase()))
+      const hasMatchingChild = !!(debouncedFolderSearch && folders.some(f => {
         let cur: typeof f | undefined = f
         while (cur) {
-          if (cur.id === folder.id) return f.name.toLowerCase().includes(folderSearch.toLowerCase())
+          if (cur.id === folder.id) return f.name.toLowerCase().includes(debouncedFolderSearch.toLowerCase())
           cur = folders.find(p => p.id === cur!.parent_id)
         }
         return false
@@ -224,9 +239,6 @@ function App() {
   }
 
   // ── Dependency graph logic ───────────────────────────────────
-  // Derive unique apps solely from recipe_connections.application
-  const uniqueApps = [...new Set(recipeConnections.map(rc => rc.application).filter(Boolean))]
-  const filteredApps = uniqueApps.filter(app => app.toLowerCase().includes(appSearch.toLowerCase()))
   const getConnectionsForApp = (app: string) =>
     [...new Map(
       recipeConnections.filter(rc => rc.application === app).map(rc => [rc.connection_name, rc])
@@ -421,8 +433,8 @@ function App() {
                 {isFolderTreeExpanded && (
                   <div className="folder-tree-dropdown">
                     {(() => {
-                      const searchLower = folderSearch.toLowerCase()
-                      if (!folderSearch) {
+                      const searchLower = debouncedFolderSearch.toLowerCase()
+                      if (!debouncedFolderSearch) {
                         return projectFolders.map(project => {
                           const isExpanded = expandedProjects.has(project.id)
                           return (
@@ -676,6 +688,11 @@ function App() {
                 {uniqueEvents.map(e => <option key={e} value={e}>{e === 'all' ? 'All event types' : e.replace(/_/g, ' ')}</option>)}
               </select>
               <span className="audit-count">{filtered.length} events</span>
+              <div className="audit-pagination">
+                <button className="audit-page-btn" disabled={auditPage === 0} onClick={() => { setAuditPage(p => p - 1); fetchData() }}>← Prev</button>
+                <span className="audit-page-info">Page {auditPage + 1}</span>
+                <button className="audit-page-btn" disabled={auditLogs.length < AUDIT_LIMIT} onClick={() => { setAuditPage(p => p + 1); fetchData() }}>Next →</button>
+              </div>
             </div>
 
             {filtered.length === 0 && (
