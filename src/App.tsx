@@ -31,20 +31,6 @@ interface Connection {
   authorization_status: string
 }
 
-interface Job {
-  status: string
-  is_error: string
-  completed_at: string
-  started_at: string
-  recipe_id: string
-}
-
-interface Project {
-  name: string
-  id: string
-  folder_id: string
-}
-
 interface Folder {
   id: number
   name: string
@@ -67,8 +53,6 @@ interface Recipe {
 
 function App() {
   const [connections, setConnections] = useState<Connection[]>([])
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [projects, setProjects] = useState<Project[]>([])
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
   const [recipeConnections, setRecipeConnections] = useState<RecipeConnection[]>([])
@@ -114,9 +98,7 @@ function App() {
       }
 
       const data = await safeJson(`${BASE_URL}/api/dashboard`);
-      setProjects(data.projects || []);
       setConnections(data.connections || []);
-      setJobs(data.jobs || []);
       setRecipes(data.recipes || []);
       setFolders(data.folders || []);
       setRecipeConnections(data.recipeConnections || []);
