@@ -77,6 +77,7 @@ function App() {
   const [auditEventFilter, setAuditEventFilter] = useState('all')
   const [auditExpanded, setAuditExpanded] = useState<Set<number>>(new Set())
   const [dailyJobData, setDailyJobData] = useState<{date: string; succeeded: number; failed: number}[]>([])
+  const [jobTotals, setJobTotals] = useState<{total: number; succeeded: number; failed: number}>({total: 0, succeeded: 0, failed: 0})
   const [activeTab, setActiveTab] = useState<'dashboard' | 'dependency' | 'audit'>('dashboard')
   const [loading, setLoading] = useState(true)
   const [selectedRecipe, setSelectedRecipe] = useState<string>('all')
@@ -120,6 +121,7 @@ function App() {
       setFolders(data.folders || []);
       setRecipeConnections(data.recipeConnections || []);
       setAuditLogs(data.auditLogs || []);
+      if (data.jobTotals) setJobTotals({ total: Number(data.jobTotals.total), succeeded: Number(data.jobTotals.succeeded), failed: Number(data.jobTotals.failed) });
       const stats = await safeJson(`${BASE_URL}/api/job-stats`);
       setDailyJobData(Array.isArray(stats) ? stats : []);
       setLastSynced(new Date().toLocaleString())
@@ -199,6 +201,20 @@ function App() {
   })
 
   const projectFolders = folders.filter(f => f.is_project)
+
+  const chartJobData = (selectedRecipe !== 'all' || selectedNode)
+    ? Object.values(
+        filteredJobs.reduce((acc, job) => {
+          if (job.completed_at) {
+            const date = new Date(job.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+            if (!acc[date]) acc[date] = { date, succeeded: 0, failed: 0 }
+            if (job.status === 'succeeded') acc[date].succeeded++
+            else if (job.status === 'failed') acc[date].failed++
+          }
+          return acc
+        }, {} as Record<string, { date: string; succeeded: number; failed: number }>)
+      ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+    : dailyJobData
 
   const recipeStats = [...filteredRecipesByNode]
     .sort((a, b) => (b.job_succeeded_count + b.job_failed_count) - (a.job_succeeded_count + a.job_failed_count))
@@ -536,10 +552,10 @@ function App() {
             <div className="stat-card">
               <div className="stat-content">
                 <h3>Jobs</h3>
-                <div className="stat-number">{jobStats.total}</div>
+                <div className="stat-number">{jobTotals.total.toLocaleString()}</div>
                 <div className="stat-detail">
-                  <span className="success">{jobStats.succeeded} Success</span>
-                  <span className="error">{jobStats.failed} Failed</span>
+                  <span className="success">{jobTotals.succeeded.toLocaleString()} Success</span>
+                  <span className="error">{jobTotals.failed.toLocaleString()} Failed</span>
                 </div>
               </div>
             </div>
@@ -591,9 +607,9 @@ function App() {
             </div>
 
             <div className="chart-card">
-              <h3>Job Status Overview</h3>
+              <h3>Job Status Overview {selectedRecipe !== 'all' ? '— Filtered by Recipe' : selectedNode ? '— Filtered by Folder' : '(Last 7 Days)'}</h3>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={dailyJobData}>
+                <BarChart data={chartJobData}>
                   <CartesianGrid strokeDasharray="3 3" />
                   <XAxis dataKey="date" />
                   <YAxis />
