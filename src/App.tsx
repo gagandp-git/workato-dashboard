@@ -133,7 +133,22 @@ function App() {
     }
   }
 
-  useEffect(() => { fetchData() }, [])
+  useEffect(() => {
+    const fetchJobStats = async () => {
+      try {
+        const url = selectedRecipe !== 'all'
+          ? `${BASE_URL}/api/job-stats?recipe_id=${selectedRecipe}`
+          : `${BASE_URL}/api/job-stats`
+        const res = await fetch(url)
+        if (!res.ok) return
+        const stats = await res.json()
+        setDailyJobData(Array.isArray(stats) ? stats : [])
+      } catch (e) {
+        console.error('job-stats fetch failed', e)
+      }
+    }
+    fetchJobStats()
+  }, [selectedRecipe])
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -196,19 +211,7 @@ function App() {
 
   const projectFolders = folders.filter(f => f.is_project)
 
-  const chartJobData = (selectedRecipe !== 'all' || selectedNode)
-    ? Object.values(
-        filteredJobs.reduce((acc, job) => {
-          if (job.completed_at) {
-            const date = new Date(job.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-            if (!acc[date]) acc[date] = { date, succeeded: 0, failed: 0 }
-            if (job.status === 'succeeded') acc[date].succeeded++
-            else if (job.status === 'failed') acc[date].failed++
-          }
-          return acc
-        }, {} as Record<string, { date: string; succeeded: number; failed: number }>)
-      ).sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-    : dailyJobData
+  const chartJobData = dailyJobData
 
   const recipeStats = [...filteredRecipesByNode]
     .sort((a, b) => (b.job_succeeded_count + b.job_failed_count) - (a.job_succeeded_count + a.job_failed_count))
