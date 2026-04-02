@@ -182,17 +182,6 @@ function App() {
     return true
   })
 
-  const filteredJobs = jobs.filter(job => {
-    if (selectedNode) {
-      const scopeIds = new Set(filteredRecipesByNode.map(r => String(r.id)))
-      if (!scopeIds.has(job.recipe_id)) return false
-    }
-    if (selectedRecipe !== 'all' && job.recipe_id !== selectedRecipe) return false
-    if (startDate && job.completed_at && new Date(job.completed_at) < new Date(startDate)) return false
-    if (endDate && job.completed_at && new Date(job.completed_at) > new Date(endDate)) return false
-    return true
-  })
-
   const connectionByApp = connections.reduce((acc, conn) => {
     if (!acc[conn.application]) acc[conn.application] = []
     acc[conn.application].push(conn)
@@ -429,210 +418,191 @@ function App() {
 
       {/* DASHBOARD TAB */}
       {activeTab === 'dashboard' && (
-        <div>
-          <div className="filters">
+        <div className="dash-layout">
 
-            {/* PROJECT + FOLDER TREE */}
-            <div className="filter-group" style={{ minWidth: '260px', position: 'relative' }} ref={folderDropdownRef}>
-              <label>Projects / Folders:</label>
-              <input
-                type="text"
-                placeholder="Search project or folder..."
-                value={folderSearch}
-                onChange={e => { setFolderSearch(e.target.value); setIsFolderTreeExpanded(true) }}
-                onFocus={() => setIsFolderTreeExpanded(true)}
-              />
-              {isFolderTreeExpanded && (
-                <div className="folder-tree-dropdown">
-                  {(() => {
-                    // build list: matching folders first (with parent chain), then rest
-                    const searchLower = folderSearch.toLowerCase()
-                    if (!folderSearch) {
-                      return projectFolders.map(project => {
-                        const isExpanded = expandedProjects.has(project.id)
+          {/* LEFT PANEL */}
+          <div className="dash-main">
+
+            {/* FILTERS ROW */}
+            <div className="dash-filters">
+              <div className="filter-group" style={{ position: 'relative', minWidth: '220px' }} ref={folderDropdownRef}>
+                <input
+                  type="text"
+                  className="dash-filter-input"
+                  placeholder="📁 All projects..."
+                  value={folderSearch}
+                  onChange={e => { setFolderSearch(e.target.value); setIsFolderTreeExpanded(true) }}
+                  onFocus={() => setIsFolderTreeExpanded(true)}
+                />
+                {isFolderTreeExpanded && (
+                  <div className="folder-tree-dropdown">
+                    {(() => {
+                      const searchLower = folderSearch.toLowerCase()
+                      if (!folderSearch) {
+                        return projectFolders.map(project => {
+                          const isExpanded = expandedProjects.has(project.id)
+                          return (
+                            <div key={project.id}>
+                              <div className="connection-item" style={{ cursor: 'pointer', fontWeight: 'bold' }}
+                                onClick={() => { toggleProject(project.id); setSelectedNode({ type: 'project', id: project.id }) }}>
+                                {isExpanded ? '▼' : '▶'} 📁 {project.name}
+                              </div>
+                              {isExpanded && renderFolders(project.id)}
+                            </div>
+                          )
+                        })
+                      }
+                      const matchingFolders = folders.filter(f => f.name.toLowerCase().includes(searchLower))
+                      const matchingProjectIds = new Set<number>()
+                      matchingFolders.forEach(f => {
+                        let cur: typeof f | undefined = f
+                        while (cur) {
+                          if (cur.is_project) { matchingProjectIds.add(cur.id); break }
+                          cur = folders.find(p => p.id === cur!.parent_id)
+                        }
+                      })
+                      const sortedProjects = [
+                        ...projectFolders.filter(p => matchingProjectIds.has(p.id)),
+                        ...projectFolders.filter(p => !matchingProjectIds.has(p.id))
+                      ]
+                      return sortedProjects.map(project => {
+                        const isExpanded = expandedProjects.has(project.id) || matchingProjectIds.has(project.id)
+                        const isMatching = project.name.toLowerCase().includes(searchLower)
                         return (
                           <div key={project.id}>
-                            <div
-                              className="connection-item"
-                              style={{ cursor: 'pointer', fontWeight: 'bold' }}
-                              onClick={() => { toggleProject(project.id); setSelectedNode({ type: 'project', id: project.id }) }}
-                            >
+                            <div className="connection-item"
+                              style={{ cursor: 'pointer', fontWeight: 'bold', backgroundColor: isMatching ? '#e6fff8' : 'transparent' }}
+                              onClick={() => { toggleProject(project.id); setSelectedNode({ type: 'project', id: project.id }) }}>
                               {isExpanded ? '▼' : '▶'} 📁 {project.name}
                             </div>
                             {isExpanded && renderFolders(project.id)}
                           </div>
                         )
                       })
-                    }
-                    // matching folders
-                    const matchingFolders = folders.filter(f => f.name.toLowerCase().includes(searchLower))
-                    // collect their parent project ids
-                    const matchingProjectIds = new Set<number>()
-                    matchingFolders.forEach(f => {
-                      // walk up to find root project
-                      let cur: typeof f | undefined = f
-                      while (cur) {
-                        if (cur.is_project) { matchingProjectIds.add(cur.id); break }
-                        cur = folders.find(p => p.id === cur!.parent_id)
-                      }
-                    })
-                    // projects that have matches come first
-                    const sortedProjects = [
-                      ...projectFolders.filter(p => matchingProjectIds.has(p.id)),
-                      ...projectFolders.filter(p => !matchingProjectIds.has(p.id))
-                    ]
-                    return sortedProjects.map(project => {
-                      const isExpanded = expandedProjects.has(project.id) || matchingProjectIds.has(project.id)
-                      const isMatching = project.name.toLowerCase().includes(searchLower)
-                      return (
-                        <div key={project.id}>
-                          <div
-                            className="connection-item"
-                            style={{ cursor: 'pointer', fontWeight: 'bold', backgroundColor: isMatching ? '#e6fff8' : 'transparent' }}
-                            onClick={() => { toggleProject(project.id); setSelectedNode({ type: 'project', id: project.id }) }}
-                          >
-                            {isExpanded ? '▼' : '▶'} 📁 {project.name}
-                          </div>
-                          {isExpanded && renderFolders(project.id)}
-                        </div>
-                      )
-                    })
-                  })()}
-                </div>
-              )}
-            </div>
-
-            {/* RECIPE FILTER */}
-            <div className="filter-group">
-              <label>Recipe:</label>
-              <select value={selectedRecipe} onChange={e => setSelectedRecipe(e.target.value)}>
-                <option value="all">All Recipes</option>
-                {filteredRecipesByNode.map(recipe => (
-                  <option key={recipe.id} value={String(recipe.id)}>{recipe.name}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* START DATE */}
-            <div className="filter-group">
-              <label>Start Date:</label>
-              <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} />
-            </div>
-
-            {/* END DATE */}
-            <div className="filter-group">
-              <label>End Date:</label>
-              <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} />
-            </div>
-
-            <button className="reset-btn" onClick={() => {
-              setSelectedRecipe('all'); setSelectedNode(null)
-              setStartDate(''); setEndDate('')
-              setIsFolderTreeExpanded(false); setFolderSearch('')
-            }}>
-              Reset Filters
-            </button>
-          </div>
-
-          {/* STAT CARDS */}
-          <div className="stats-grid">
-            <div className="stat-card">
-              <div className="stat-content">
-                <h3>Connections</h3>
-                <div className="stat-number">{connectionStats.total}</div>
-                <div className="stat-detail">
-                  <span className="success">{connectionStats.active} Active</span>
-                  <span className="error">{connectionStats.failed} Failed</span>
-                </div>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-content">
-                <h3>Jobs</h3>
-                <div className="stat-number">{jobTotals.total.toLocaleString()}</div>
-                <div className="stat-detail">
-                  <span className="success">{jobTotals.succeeded.toLocaleString()} Success</span>
-                  <span className="error">{jobTotals.failed.toLocaleString()} Failed</span>
-                </div>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-content">
-                <h3>Projects</h3>
-                <div className="stat-number">{projects.length}</div>
-                <div className="stat-detail">Active Projects</div>
-              </div>
-            </div>
-            <div className="stat-card">
-              <div className="stat-content">
-                <h3>Recipes</h3>
-                <div className="stat-number">{recipes.length}</div>
-                <div className="stat-detail">
-                  <span className="success">{recipes.filter(r => r.running === true).length} Running</span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* CHARTS */}
-          <div className="charts-grid">
-            <div className="chart-card">
-              <h3>Connections by Application</h3>
-              <div className="connections-menu">
-                {Object.entries(connectionByApp).map(([app, conns]) => (
-                  <div key={app} className="app-group">
-                    <div className="app-header" onClick={() => toggleApp(app)}>
-                      <span className="app-toggle">{expandedApps.has(app) ? '▼' : '▶'}</span>
-                      <span className="app-name">{app}</span>
-                      <span className="app-count">{conns.length}</span>
-                    </div>
-                    {expandedApps.has(app) && (
-                      <div className="connections-list">
-                        {conns.map((conn, idx) => (
-                          <div key={idx} className="connection-item">
-                            <span className="connection-name">{conn.name}</span>
-                            <span className={`connection-status ${conn.authorization_status === 'success' ? 'status-success' : 'status-failed'}`}>
-                              {conn.authorization_status === 'success' ? '✓' : '✗'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                    })()}
                   </div>
-                ))}
+                )}
+              </div>
+
+              <select className="dash-filter-input" value={selectedRecipe} onChange={e => setSelectedRecipe(e.target.value)}>
+                <option value="all">📋 All recipes</option>
+                {filteredRecipesByNode.map(r => <option key={r.id} value={String(r.id)}>{r.name}</option>)}
+              </select>
+
+              <input type="date" className="dash-filter-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              <input type="date" className="dash-filter-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
+
+              <button className="reset-btn" onClick={() => {
+                setSelectedRecipe('all'); setSelectedNode(null)
+                setStartDate(''); setEndDate('')
+                setIsFolderTreeExpanded(false); setFolderSearch('')
+              }}>Reset</button>
+            </div>
+
+            {/* STAT NUMBERS ROW */}
+            <div className="dash-stat-row">
+              <div className="dash-stat-item">
+                <div className="dash-stat-num">{recipes.length.toLocaleString()}</div>
+                <div className="dash-stat-label">Recipes</div>
+              </div>
+              <div className="dash-stat-divider"></div>
+              <div className="dash-stat-item">
+                <div className="dash-stat-num success">{jobTotals.succeeded.toLocaleString()}</div>
+                <div className="dash-stat-label">✅ Successful jobs</div>
+              </div>
+              <div className="dash-stat-divider"></div>
+              <div className="dash-stat-item">
+                <div className="dash-stat-num error">{jobTotals.failed.toLocaleString()}</div>
+                <div className="dash-stat-label">❌ Failed jobs</div>
+              </div>
+              <div className="dash-stat-divider"></div>
+              <div className="dash-stat-item">
+                <div className="dash-stat-num">{jobTotals.total.toLocaleString()}</div>
+                <div className="dash-stat-label">Total jobs</div>
               </div>
             </div>
 
-            <div className="chart-card">
-              <h3>Job Status Overview {selectedRecipe !== 'all' ? '— Filtered by Recipe' : selectedNode ? '— Filtered by Folder' : '(Last 7 Days)'}</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={chartJobData}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="date" />
-                  <YAxis />
+            {/* JOB CHART */}
+            <div className="dash-chart-card">
+              <div className="dash-chart-title">Job Status {selectedRecipe !== 'all' ? '— Filtered by Recipe' : selectedNode ? '— Filtered by Folder' : '(Last 7 Days)'}</div>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart data={chartJobData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="succeeded" stackId="a" fill="#43e97b" name="Succeeded" />
+                  <Bar dataKey="succeeded" stackId="a" fill="#43e97b" name="Succeeded" radius={[3,3,0,0]} />
                   <Bar dataKey="failed" stackId="a" fill="#fa709a" name="Failed" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
 
-            <div className="chart-card full-width">
-              <h3>Top 5 Recipes Performance</h3>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={recipeStats}>
-                  <CartesianGrid strokeDasharray="3 3" />
-                  <XAxis dataKey="name" />
-                  <YAxis />
+            {/* RECIPE ACTIVITY */}
+            <div className="dash-chart-card">
+              <div className="dash-chart-title">Recipe Activity — Top 5</div>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={recipeStats} layout="vertical" margin={{ top: 4, right: 16, left: 8, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} />
+                  <XAxis type="number" tick={{ fontSize: 11 }} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={130} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="succeeded" fill="#43e97b" name="Succeeded" />
-                  <Bar dataKey="failed" fill="#fa709a" name="Failed" />
+                  <Bar dataKey="succeeded" fill="#43e97b" name="Succeeded" stackId="a" />
+                  <Bar dataKey="failed" fill="#fa709a" name="Failed" stackId="a" />
                 </BarChart>
               </ResponsiveContainer>
             </div>
           </div>
+
+          {/* RIGHT PANEL — CONNECTIONS */}
+          <div className="dash-sidebar">
+            <div className="dash-sidebar-title">Connections</div>
+
+            {/* summary numbers */}
+            <div className="dash-conn-summary">
+              <div className="dash-conn-stat">
+                <div className="dash-conn-num">{connectionStats.total}</div>
+                <div className="dash-conn-lbl">App connections</div>
+              </div>
+              <div className="dash-conn-stat">
+                <div className="dash-conn-num success">{connectionStats.active}</div>
+                <div className="dash-conn-lbl">Active</div>
+              </div>
+              <div className="dash-conn-stat">
+                <div className="dash-conn-num error">{connectionStats.failed}</div>
+                <div className="dash-conn-lbl">Failed</div>
+              </div>
+            </div>
+
+            <div className="dash-sidebar-sub">Connections by application</div>
+
+            {/* expandable app list */}
+            <div className="dash-conn-list">
+              {Object.entries(connectionByApp).map(([app, conns]) => (
+                <div key={app} className="app-group">
+                  <div className="app-header" onClick={() => toggleApp(app)}>
+                    <span className="app-toggle">{expandedApps.has(app) ? '▼' : '▶'}</span>
+                    <span className="app-name">{app}</span>
+                    <span className="app-count">{conns.length}</span>
+                  </div>
+                  {expandedApps.has(app) && (
+                    <div className="connections-list">
+                      {conns.map((conn, idx) => (
+                        <div key={idx} className="connection-item">
+                          <span className="connection-name">{conn.name}</span>
+                          <span className={`connection-status ${conn.authorization_status === 'success' ? 'status-success' : 'status-failed'}`}>
+                            {conn.authorization_status === 'success' ? '✓' : '✗'}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+
         </div>
       )}
 
