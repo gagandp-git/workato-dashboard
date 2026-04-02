@@ -178,12 +178,6 @@ function App() {
     return true
   })
 
-  const jobStats = {
-    total: filteredJobs.length,
-    succeeded: filteredJobs.filter(j => j.status === 'succeeded').length,
-    failed: filteredJobs.filter(j => j.status === 'failed').length
-  }
-
   const connectionByApp = connections.reduce((acc, conn) => {
     if (!acc[conn.application]) acc[conn.application] = []
     acc[conn.application].push(conn)
