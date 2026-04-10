@@ -1,7 +1,20 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import './App.css'
-const BASE_URL = import.meta.env.VITE_API_URL as string;
+import Login from "./Login"
+
+function App() {
+  const [isAuth, setIsAuth] = useState(false)
+  const BASE_URL = import.meta.env.VITE_API_URL as string;
+
+  useEffect(() => {
+    const token = localStorage.getItem("token")
+    if (token) setIsAuth(true)
+  }, [])
+
+  if (!isAuth) {
+    return <Login onLogin={() => setIsAuth(true)} />
+  }
 
 interface AuditLog {
   id: number
@@ -89,18 +102,26 @@ function App() {
       setLoading(true)
       setFetchError(null)
 
-      const safeJson = async (url: string) => {
-        try {
-          const res = await fetch(url)
-          if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
-          return await res.json()
-        } catch (e) {
-          console.error(`Failed to fetch ${url}:`, e)
-          return []
-        }
-      }
+      async function safeJson(url: string, options: RequestInit = {}) {
+  const res = await fetch(url, options)
 
-      const data = await safeJson(`${BASE_URL}/api/dashboard?auditLimit=${AUDIT_LIMIT}&auditOffset=${auditPage * AUDIT_LIMIT}`);
+  if (!res.ok) {
+    throw new Error(`Error: ${res.status}`)
+  }
+
+  return res.json()
+}
+
+      const token = localStorage.getItem("token")
+
+const data = await safeJson(
+  `${BASE_URL}/api/dashboard?auditLimit=${AUDIT_LIMIT}&auditOffset=${auditPage * AUDIT_LIMIT}`,
+  {
+    headers: {
+      Authorization: `Bearer ${token}`
+    }
+  }
+)
       setConnections(data.connections || []);
       setRecipes(data.recipes || []);
       setFolders(data.folders || []);
@@ -755,6 +776,5 @@ function App() {
       })()}
     </div>
   )
-}
-
+}}
 export default App
