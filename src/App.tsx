@@ -1,21 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react'
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
 import './App.css'
-import Login from "./Login"
-
-function App() {
-  const [isAuth, setIsAuth] = useState(false)
-  const BASE_URL = import.meta.env.VITE_API_URL as string;
-
-  useEffect(() => {
-    const token = localStorage.getItem("token")
-    if (token) setIsAuth(true)
-  }, [])
-
-  if (!isAuth) {
-    return <Login onLogin={() => setIsAuth(true)} />
-  }
-
+import Login from './Login'
+const BASE_URL = import.meta.env.VITE_API_URL as string;
 interface AuditLog {
   id: number
   timestamp: string
@@ -65,6 +52,7 @@ interface Recipe {
 }
 
 function App() {
+  const [isAuth, setIsAuth] = useState(false)
   const [connections, setConnections] = useState<Connection[]>([])
   const [recipes, setRecipes] = useState<Recipe[]>([])
   const [folders, setFolders] = useState<Folder[]>([])
@@ -140,6 +128,11 @@ const data = await safeJson(
   }
 
   useEffect(() => { fetchData() }, [])
+
+  useEffect(() => {
+    const token = localStorage.getItem('token')
+    if (token) setIsAuth(true)
+  }, [])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedFolderSearch(folderSearch), 300)
@@ -392,6 +385,8 @@ const data = await safeJson(
       </div>
     )
   }
+
+  if (!isAuth) return <Login onLogin={() => setIsAuth(true)} />
 
   if (loading) {
     return (
@@ -775,6 +770,6 @@ const data = await safeJson(
         )
       })()}
     </div>
-  )
-}}
+}
+
 export default App
