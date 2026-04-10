@@ -770,6 +770,6 @@ const data = await safeJson(
         )
       })()}
     </div>
-}
+)}
 
 export default App
