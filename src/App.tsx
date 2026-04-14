@@ -82,8 +82,22 @@ function App() {
   const [appSearch, setAppSearch] = useState('')
   const [appSearchOpen, setAppSearchOpen] = useState(false)
   const [fetchError, setFetchError] = useState<string | null>(null)
+  const sessionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const SESSION_TIMEOUT = 10 * 60 * 1000
   const folderDropdownRef = useRef<HTMLDivElement>(null)
   const appSearchRef = useRef<HTMLDivElement>(null)
+
+  const handleLogout = () => {
+    localStorage.removeItem("token")
+    setIsAuth(false)
+    setFetchError(null)
+    setLastSynced(null)
+    setLoading(false)
+    if (sessionTimerRef.current) {
+      window.clearTimeout(sessionTimerRef.current)
+      sessionTimerRef.current = null
+    }
+  }
 
   const fetchData = async () => {
     try {
@@ -133,6 +147,40 @@ const data = await safeJson(
     const token = localStorage.getItem('token')
     if (token) setIsAuth(true)
   }, [])
+
+  useEffect(() => {
+    if (!isAuth) {
+      if (sessionTimerRef.current) {
+        window.clearTimeout(sessionTimerRef.current)
+        sessionTimerRef.current = null
+      }
+      return
+    }
+
+    const resetSessionTimer = () => {
+      if (sessionTimerRef.current) {
+        window.clearTimeout(sessionTimerRef.current)
+      }
+      sessionTimerRef.current = window.setTimeout(() => {
+        alert('You have been logged out due to 10 minutes of inactivity.')
+        handleLogout()
+      }, SESSION_TIMEOUT)
+    }
+
+    const handleActivity = () => resetSessionTimer()
+    const events: Array<keyof WindowEventMap> = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll']
+
+    resetSessionTimer()
+    events.forEach(eventName => window.addEventListener(eventName, handleActivity))
+
+    return () => {
+      if (sessionTimerRef.current) {
+        window.clearTimeout(sessionTimerRef.current)
+        sessionTimerRef.current = null
+      }
+      events.forEach(eventName => window.removeEventListener(eventName, handleActivity))
+    }
+  }, [isAuth])
 
   useEffect(() => {
     const t = setTimeout(() => setDebouncedFolderSearch(folderSearch), 300)
@@ -417,6 +465,7 @@ const data = await safeJson(
         </button>
         <div className="tab-actions">
           <button onClick={fetchData} className="refresh-btn">🔄 Refresh</button>
+          <button onClick={handleLogout} className="logout-btn">Logout</button>
           <span className="last-synced">{lastSynced ? `Last synced: ${lastSynced}` : 'Not synced yet'}</span>
         </div>
       </div>

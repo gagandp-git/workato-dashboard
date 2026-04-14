@@ -504,6 +504,23 @@ tbody tr:hover {
   box-shadow: 0 4px 12px rgba(17,153,142,0.4);
 }
 
+.logout-btn {
+  padding: 0.5rem 1.1rem;
+  background: linear-gradient(135deg, #ef4444 0%, #f97316 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.logout-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.35);
+}
+
 .last-synced {
   font-size: 0.82rem;
   color: #888;
