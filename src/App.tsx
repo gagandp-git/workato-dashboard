@@ -271,7 +271,12 @@ const data = await safeJson(
 
   const projectFolders = useMemo(() => folders.filter(f => f.is_project), [folders])
 
-  const chartJobData = dailyJobData
+  const chartJobData = useMemo(() => {
+    if (dailyJobData.length <= 8) return dailyJobData
+    return [...dailyJobData]
+      .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+      .slice(-8)
+  }, [dailyJobData])
 
   const renderFolders = (parentId: number, level = 1): JSX.Element[] => {
     return folders.filter(f => f.parent_id === parentId).map(folder => {
@@ -593,8 +598,8 @@ const data = await safeJson(
                   <YAxis tick={{ fontSize: 12 }} />
                   <Tooltip />
                   <Legend />
-                  <Bar dataKey="succeeded" stackId="a" fill="#43e97b" name="Succeeded" radius={[3,3,0,0]} />
-                  <Bar dataKey="failed" stackId="a" fill="#fa709a" name="Failed" />
+                  <Bar dataKey="succeeded" stackId="a" fill="#43e97b" name="Succeeded" radius={[3,3,0,0]} barSize={28} />
+                  <Bar dataKey="failed" stackId="a" fill="#fa709a" name="Failed" barSize={28} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
